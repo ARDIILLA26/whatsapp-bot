@@ -1,0 +1,12 @@
+{
+  "name": "whatsapp-bot",
+  "version": "1.0.0",
+  "description": "Bot de WhatsApp",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
