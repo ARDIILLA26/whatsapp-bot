@@ -9,7 +9,9 @@ const VERIFY_TOKEN = "caceres123";
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
-  const challenge = req.query["hub.challenge"];
+  const challenge = req.query["hub.challenge"];app.get("/", (req, res) => {
+  res.send("Servidor funcionando");
+});
 
   if (mode === "subscribe" && token === VERIFY_TOKEN) {
     console.log("Webhook verificado");
