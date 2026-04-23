@@ -5,7 +5,7 @@ app.use(express.json());
 
 const VERIFY_TOKEN = "caceres123";
 
-// VERIFICACIÓN
+// Verificación de webhook
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
@@ -20,7 +20,7 @@ app.get("/webhook", (req, res) => {
   }
 });
 
-// MENSAJES
+// Recepción de mensajes
 app.post("/webhook", (req, res) => {
   console.log("MENSAJE:", JSON.stringify(req.body, null, 2));
   return res.sendStatus(200);
