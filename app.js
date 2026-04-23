@@ -3,7 +3,7 @@ const app = express();
 
 app.use(express.json());
 
-// 🔑 Token de verificación (DEBE ser igual al de Meta)
+// 🔑 Token (DEBE ser igual en Meta)
 const VERIFY_TOKEN = "caceres123";
 
 // =============================
@@ -19,7 +19,8 @@ app.get("/webhook", (req, res) => {
   console.log("TOKEN RECIBIDO:", token);
   console.log("TOKEN CORRECTO:", VERIFY_TOKEN);
 
-  if (mode === "subscribe" && token === VERIFY_TOKEN) {
+  // 🔥 IMPORTANTE: acepta ambos por si el navegador traduce
+  if ((mode === "subscribe" || mode === "suscribirse") && token === VERIFY_TOKEN) {
     return res.status(200).type("text/plain").send(String(challenge));
   } else {
     return res.sendStatus(403);
