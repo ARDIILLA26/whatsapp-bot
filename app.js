@@ -5,7 +5,9 @@ app.use(express.json());
 
 const VERIFY_TOKEN = "caceres123";
 
-const ACCESS_TOKEN = "EAAVJmkSwXmUBRYW2wKPZBZBzKI1mlxnWllFYcimeol4EXvcgloShCTMuV8NCfqthNbqEIzXIk1zmv5egrZBK8zuiLujlZBx9sCFrLY7bkNFiqx6c4CfdLKWr5Nxv0Fm94xNwLHmo2UZCB5FcZBC7TTrYkEZCQuTqWDnsqWzjN0VQel69vZBpmi8oXlFAp93soT8QRmYKJpKAGsvBkGrt5tMIqR72ZAnD6ZCP8uDzlUtEPZBuhf78ZAROX9OrKx4TXuZAGtggnXpFLASRRCrDyQhC1wsG8uIKc;
+const ACCESS_TOKEN = "const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
+const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN || "caceres123";;
 const PHONE_NUMBER_ID = "1129641810224240";
 
 app.get("/webhook", (req, res) => {
