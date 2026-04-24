@@ -6,7 +6,7 @@ app.use(express.json());
 const VERIFY_TOKEN = "caceres123";
 
 // ⚠️ Pega aquí tu token de Meta
-const ACCESS_TOKEN = "PEGA_AQUI_TU_TOKEN";
+const ACCESS_TOKEN = EAAVJmkSwXmUBRejKPCZAADj1h40pnsnmQi5vyuoIx4Y4lZBtMGjvKZCBjIO0ZA5cPjB3TkWt1zXO7sVFSZCJuhTWc1ZB9u2k0IANa08xg81d6yYpyGoZCsmI1UxqDCMKalaHBUKnb4FARmbJFoiBIrHCZCRnpgZCgVlIgQNQX4l0t87TqhFudvP5jaJL5WWylXnWUZAd3F7alGCjBazcptplZBZA7oFzkC1jXvPqi4KJjPveK9luF09uA6p75vYjaijDZAg1yZBaTGAqFDiDIKmUmXQLIlxZACA
 
 // Tu ID de número de teléfono de Meta
 const PHONE_NUMBER_ID = "1129641810224240";
