@@ -12,8 +12,7 @@ const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 const GRAPH_API_VERSION = "v25.0";
 const TEST_NUMBER = "525645572771";
 
-// Guarda mensajes ya procesados
-const processedMessages = new Set();
+const processed = new Map();
 
 app.get("/", (req, res) => {
   res.status(200).send("WhatsApp Bot funcionando");
@@ -25,59 +24,70 @@ app.get("/webhook", (req, res) => {
   const challenge = req.query["hub.challenge"];
 
   if (mode === "subscribe" && token === VERIFY_TOKEN) {
-    console.log("Webhook verificado");
     return res.status(200).send(challenge);
   }
 
   return res.sendStatus(403);
 });
 
-app.post("/webhook", async (req, res) => {
-  try {
-    const value = req.body.entry?.[0]?.changes?.[0]?.value;
-    const message = value?.messages?.[0];
+app.post("/webhook", (req, res) => {
+  // Responder rápido a Meta para evitar reintentos
+  res.sendStatus(200);
 
-    if (!message) {
-      console.log("Evento sin mensaje. Ignorado.");
-      return res.sendStatus(200);
-    }
-
-    const messageId = message.id;
-
-    if (processedMessages.has(messageId)) {
-      console.log("Mensaje duplicado ignorado:", messageId);
-      return res.sendStatus(200);
-    }
-
-    processedMessages.add(messageId);
-
-    // Limpieza para que no crezca infinito
-    setTimeout(() => {
-      processedMessages.delete(messageId);
-    }, 10 * 60 * 1000);
-
-    const text = message.text?.body || "";
-    const type = message.type;
-
-    console.log("Mensaje nuevo:", messageId);
-    console.log("Texto:", text);
-
-    if (type !== "text") {
-      await sendMessage(TEST_NUMBER, "Solo puedo responder mensajes de texto.");
-      return res.sendStatus(200);
-    }
-
-    await sendMessage(TEST_NUMBER, `Hola 👋 Recibí tu mensaje: "${text}"`);
-
-    return res.sendStatus(200);
-  } catch (error) {
-    console.error("ERROR WEBHOOK:", error.message);
-    return res.sendStatus(200);
-  }
+  processWebhook(req.body).catch((error) => {
+    console.error("ERROR PROCESANDO WEBHOOK:", error.message);
+  });
 });
+
+async function processWebhook(body) {
+  console.log("WEBHOOK:", JSON.stringify(body, null, 2));
+
+  const value = body.entry?.[0]?.changes?.[0]?.value;
+  const message = value?.messages?.[0];
+
+  if (!message) {
+    console.log("Evento sin mensaje. Ignorado.");
+    return;
+  }
+
+  const from = message.from || "";
+  const type = message.type;
+  const text = message.text?.body || "";
+  const timestamp = message.timestamp || "";
+
+  const dedupeKey = `${from}-${type}-${text}-${timestamp}`;
+
+  if (processed.has(dedupeKey)) {
+    console.log("DUPLICADO IGNORADO:", dedupeKey);
+    return;
+  }
+
+  processed.set(dedupeKey, Date.now());
+
+  // limpiar memoria
+  setTimeout(() => {
+    processed.delete(dedupeKey);
+  }, 15 * 60 * 1000);
+
+  console.log("MENSAJE NUEVO");
+  console.log("FROM:", from);
+  console.log("TYPE:", type);
+  console.log("TEXT:", text);
+  console.log("TIMESTAMP:", timestamp);
+
+  if (type !== "text") {
+    await sendMessage(TEST_NUMBER, "Solo puedo responder mensajes de texto.");
+    return;
+  }
+
+  await sendMessage(TEST_NUMBER, `Hola 👋 Recibí tu mensaje: "${text}"`);
+}
 
 async function sendMessage(to, body) {
   const cleanTo = String(to).replace(/\D/g, "");
+
+  console.log("ENVIANDO A:", cleanTo);
+  console.log("MENSAJE:", body);
 
   const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${PHONE_NUMBER_ID}/messages`;
 
