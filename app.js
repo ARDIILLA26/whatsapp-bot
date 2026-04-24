@@ -20,7 +20,7 @@ app.get("/webhook", (req, res) => {
   if (mode === "subscribe" && token === VERIFY_TOKEN) {
     return res.status(200).type("text/plain").send(String(challenge));
   }
-
+EAAVJmkSwXmUBRV4KTeDjhAA4XZA4zmeesGuZAWC1o36lb5J0zcZA6zkMDSj59nuZCZCIkP1ca6dDo5iCyfZAr5WOPHONARuRAEhlGzYAAz4ZA1Nfm6uj8bkLvghlJqFaIdZBZCOo53iNWp3L479dnM5VZCeiWFskau18lyZBHHN4e9l9lTZBhvDfZAlbTzHdZCsmayPpttDLksFW6ZCZCVLcyAZBLp3En4fOFt5SNsnzi0rkZBIDKmuN55MAZB8NeQDeMLdLpRvN19oAcLfOk2IP3OAprPqVmZCkqk2x
   return res.sendStatus(403);
 });
 
