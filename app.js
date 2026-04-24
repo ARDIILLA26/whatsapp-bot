@@ -11,123 +11,102 @@ const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 
 const GRAPH_API_VERSION = "v25.0";
 
-// --------------------------------
-// HOME
-// --------------------------------
+// TU NÚMERO AUTORIZADO EN META, SIN + NI ESPACIOS
+const TEST_NUMBER = "525645572771";
+
 app.get("/", (req, res) => {
-  res.send("WhatsApp Bot funcionando 🚀");
+  res.status(200).send("WhatsApp Bot funcionando");
 });
 
-// --------------------------------
-// VERIFICACIÓN WEBHOOK
-// --------------------------------
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
   if (mode === "subscribe" && token === VERIFY_TOKEN) {
-    console.log("✅ Webhook verificado");
+    console.log("Webhook verificado");
     return res.status(200).send(challenge);
   }
 
-  console.log("❌ Error verificación webhook");
   return res.sendStatus(403);
 });
 
-// --------------------------------
-// RECIBIR MENSAJES
-// --------------------------------
 app.post("/webhook", async (req, res) => {
   try {
-    console.log("📩 Webhook recibido:");
+    console.log("WEBHOOK COMPLETO:");
     console.log(JSON.stringify(req.body, null, 2));
 
-    const entry = req.body.entry?.[0];
-    const changes = entry?.changes?.[0];
-    const value = changes?.value;
+    const value = req.body.entry?.[0]?.changes?.[0]?.value;
+    const message = value?.messages?.[0];
 
-    // 👇 IMPORTANTE: detectar mensajes correctamente
-    if (!value || !value.messages) {
-      console.log("ℹ️ Evento sin mensajes (status, delivery, etc)");
+    if (!message) {
+      console.log("Evento sin mensaje. Ignorado.");
       return res.sendStatus(200);
     }
 
-    const message = value.messages[0];
-
-    const from = message.from; // ya viene limpio (sin +)
+    const rawFrom = message.from;
     const type = message.type;
     const text = message.text?.body || "";
 
-    console.log("👤 De:", from);
-    console.log("📦 Tipo:", type);
-    console.log("💬 Texto:", text);
+    console.log("RAW FROM recibido:", rawFrom);
+    console.log("TIPO:", type);
+    console.log("TEXTO:", text);
 
     if (type !== "text") {
-      await sendMessage(from, "Solo puedo responder texto por ahora 🙏");
+      await sendMessage(TEST_NUMBER, "Solo puedo responder mensajes de texto.");
       return res.sendStatus(200);
     }
 
-    // 👉 RESPUESTA AUTOMÁTICA
-    const reply = `Hola 👋 Recibí: "${text}"`;
+    await sendMessage(TEST_NUMBER, `Hola 👋 Recibí tu mensaje: "${text}"`);
 
-    await sendMessage(from, reply);
-
-    res.sendStatus(200);
+    return res.sendStatus(200);
   } catch (error) {
-    console.error("❌ Error en webhook:", error.message);
-    res.sendStatus(200);
+    console.error("ERROR WEBHOOK:", error.message);
+    return res.sendStatus(200);
   }
 });
 
-// --------------------------------
-// ENVIAR MENSAJE
-// --------------------------------
-async function sendMessage(to, message) {
-  try {
-    // limpiar número (por si acaso)
-    const cleanTo = String(to).replace(/\D/g, "");
+async function sendMessage(to, body) {
+  const cleanTo = String(to).replace(/\D/g, "");
 
-    console.log("📤 Enviando a:", cleanTo);
+  console.log("ENVIANDO A:", cleanTo);
+  console.log("MENSAJE:", body);
 
-    const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${PHONE_NUMBER_ID}/messages`;
+  const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${PHONE_NUMBER_ID}/messages`;
 
-    const payload = {
-      messaging_product: "whatsapp",
-      to: cleanTo,
-      type: "text",
-      text: {
-        body: message,
-      },
-    };
+  const payload = {
+    messaging_product: "whatsapp",
+    to: cleanTo,
+    type: "text",
+    text: {
+      preview_url: false,
+      body,
+    },
+  };
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${ACCESS_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+  console.log("PAYLOAD:", JSON.stringify(payload, null, 2));
 
-    const data = await response.json();
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${ACCESS_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
 
-    console.log("📡 Status:", response.status);
-    console.log("📡 Response:", JSON.stringify(data, null, 2));
+  const data = await response.json();
 
-    if (!response.ok) {
-      throw new Error(JSON.stringify(data));
-    }
+  console.log("META STATUS:", response.status);
+  console.log("META RESPONSE:", JSON.stringify(data, null, 2));
 
-    return data;
-  } catch (error) {
-    console.error("❌ Error enviando mensaje:", error.message);
+  if (!response.ok) {
+    throw new Error(JSON.stringify(data));
   }
+
+  return data;
 }
 
-// --------------------------------
-// START SERVER
-// --------------------------------
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
