@@ -10,9 +10,10 @@ const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 
 const GRAPH_API_VERSION = "v25.0";
-
-// TU NÚMERO AUTORIZADO EN META, SIN + NI ESPACIOS
 const TEST_NUMBER = "525645572771";
+
+// Guarda mensajes ya procesados
+const processedMessages = new Set();
 
 app.get("/", (req, res) => {
   res.status(200).send("WhatsApp Bot funcionando");
@@ -33,9 +34,6 @@ app.get("/webhook", (req, res) => {
 
 app.post("/webhook", async (req, res) => {
   try {
-    console.log("WEBHOOK COMPLETO:");
-    console.log(JSON.stringify(req.body, null, 2));
-
     const value = req.body.entry?.[0]?.changes?.[0]?.value;
     const message = value?.messages?.[0];
 
@@ -44,13 +42,25 @@ app.post("/webhook", async (req, res) => {
       return res.sendStatus(200);
     }
 
-    const rawFrom = message.from;
-    const type = message.type;
-    const text = message.text?.body || "";
+    const messageId = message.id;
 
-    console.log("RAW FROM recibido:", rawFrom);
-    console.log("TIPO:", type);
-    console.log("TEXTO:", text);
+    if (processedMessages.has(messageId)) {
+      console.log("Mensaje duplicado ignorado:", messageId);
+      return res.sendStatus(200);
+    }
+
+    processedMessages.add(messageId);
+
+    // Limpieza para que no crezca infinito
+    setTimeout(() => {
+      processedMessages.delete(messageId);
+    }, 10 * 60 * 1000);
+
+    const text = message.text?.body || "";
+    const type = message.type;
+
+    console.log("Mensaje nuevo:", messageId);
+    console.log("Texto:", text);
 
     if (type !== "text") {
       await sendMessage(TEST_NUMBER, "Solo puedo responder mensajes de texto.");
@@ -69,9 +79,6 @@ app.post("/webhook", async (req, res) => {
 async function sendMessage(to, body) {
   const cleanTo = String(to).replace(/\D/g, "");
 
-  console.log("ENVIANDO A:", cleanTo);
-  console.log("MENSAJE:", body);
-
   const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${PHONE_NUMBER_ID}/messages`;
 
   const payload = {
@@ -83,8 +90,6 @@ async function sendMessage(to, body) {
       body,
     },
   };
-
-  console.log("PAYLOAD:", JSON.stringify(payload, null, 2));
 
   const response = await fetch(url, {
     method: "POST",
