@@ -4,30 +4,36 @@ const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
+
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 
+const GRAPH_API_VERSION = "v25.0";
+
 app.get("/", (req, res) => {
-  res.status(200).send("WhatsApp bot running");
+  res.status(200).send("Bot de WhatsApp activo");
 });
 
+// Verificación del webhook
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
   if (mode === "subscribe" && token === VERIFY_TOKEN) {
-    console.log("Webhook verified");
+    console.log("Webhook verificado correctamente");
     return res.status(200).send(challenge);
   }
 
+  console.log("Error verificando webhook");
   return res.sendStatus(403);
 });
 
+// Recibir mensajes
 app.post("/webhook", async (req, res) => {
   try {
-    console.log("Webhook payload:", JSON.stringify(req.body, null, 2));
+    console.log("Webhook recibido:", JSON.stringify(req.body, null, 2));
 
     const entry = req.body.entry?.[0];
     const changes = entry?.changes?.[0];
@@ -35,51 +41,54 @@ app.post("/webhook", async (req, res) => {
     const message = value?.messages?.[0];
 
     if (!message) {
-      console.log("No incoming message. Probably status update.");
+      console.log("No es mensaje entrante. Puede ser status/update.");
       return res.sendStatus(200);
     }
 
-    const from = message.from;
-    const text = message.text?.body;
+    const from = message.from; // ESTE YA VIENE SIN +
+    const messageType = message.type;
+    const text = message.text?.body || "";
 
-    console.log("From:", from);
-    console.log("Text:", text);
+    console.log("Número que escribió:", from);
+    console.log("Tipo de mensaje:", messageType);
+    console.log("Texto recibido:", text);
 
-    if (!from) {
-      console.log("No sender found.");
-      return res.sendStatus(200);
-    }
-
-    if (message.type !== "text") {
+    if (messageType !== "text") {
       await sendMessage(from, "Por ahora solo puedo responder mensajes de texto.");
       return res.sendStatus(200);
     }
 
-    const reply = `Recibí tu mensaje: "${text}"`;
+    const reply = `Hola 👋 Recibí tu mensaje: ${text}`;
 
     await sendMessage(from, reply);
 
     return res.sendStatus(200);
   } catch (error) {
-    console.error("Webhook error:", error.response?.data || error.message || error);
+    console.error("Error en webhook:", error.message);
     return res.sendStatus(200);
   }
 });
 
-async function sendMessage(to, message) {
-  const url = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`;
+// Enviar mensaje
+async function sendMessage(to, body) {
+  const cleanTo = String(to).replace(/\D/g, "");
+
+  console.log("Enviando mensaje a:", cleanTo);
+  console.log("Mensaje:", body);
+
+  const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${PHONE_NUMBER_ID}/messages`;
 
   const payload = {
     messaging_product: "whatsapp",
-    to,
+    to: cleanTo,
     type: "text",
     text: {
       preview_url: false,
-      body: message,
+      body: body,
     },
   };
 
-  console.log("Sending message payload:", JSON.stringify(payload, null, 2));
+  console.log("Payload enviado:", JSON.stringify(payload, null, 2));
 
   const response = await fetch(url, {
     method: "POST",
@@ -105,4 +114,3 @@ async function sendMessage(to, message) {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-
