@@ -3,12 +3,9 @@ const express = require("express");
 const app = express();
 app.use(express.json());
 
-const VERIFY_TOKEN = "caceres123";
-
-const ACCESS_TOKEN = "const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN || "caceres123";
+const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
-const VERIFY_TOKEN = process.env.VERIFY_TOKEN || "caceres123";;
-const PHONE_NUMBER_ID = "1129641810224240";
 
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
