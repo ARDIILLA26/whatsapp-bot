@@ -1,144 +1,139 @@
- const { URL } = require("url");
-const config = require("../../config/default");
+// src/services/httpServer.js
 
-const { parseJsonBody, sendJson } = require("../utils/http");
-const { extractIncomingMessages } = require("../utils/whatsapp");
+import http from "http";
 
-const {
-  getSessionByUserId,
-  getLeads,
-  getSessions,
-} = require("./storageService");
+/**
+ * Helper: enviar JSON
+ */
+function sendJson(res, statusCode, data) {
+  res.writeHead(statusCode, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(data));
+}
 
-const { handleIncomingText } = require("../flows/riskFlow");
-
-const {
-  sendTextMessage,
-  isWhatsAppConfigured,
-} = require("./whatsappService");
-
-function sendPlainText(res, statusCode, text) {
+/**
+ * Helper: enviar texto
+ */
+function sendText(res, statusCode, text) {
   res.writeHead(statusCode, { "Content-Type": "text/plain" });
-  return res.end(String(text || ""));
+  res.end(text);
 }
 
-function createServerHandler() {
-  return async (req, res) => {
-    const requestUrl = new URL(
-      req.url,
-      `http://${req.headers.host || "localhost"}`
-    );
+/**
+ * Parseo básico del body
+ */
+function parseJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = "";
 
-    try {
-      if (req.method === "GET" && requestUrl.pathname === "/health") {
-        return sendJson(res, 200, {
-          ok: true,
-          service: "chatbot-whatsapp-business-caceres-casio",
-          whatsappConfigured: isWhatsAppConfigured(),
-          baseUrl: config.app.baseUrl,
-          model: process.env.OPENAI_MODEL || "gpt-5.5",
-        });
+    req.on("data", (chunk) => {
+      body += chunk.toString();
+    });
+
+    req.on("end", () => {
+      try {
+        const parsed = body ? JSON.parse(body) : {};
+        resolve(parsed);
+      } catch (err) {
+        reject(err);
       }
+    });
 
-      if (req.method === "GET" && requestUrl.pathname === "/webhook") {
-        return handleWebhookVerification(requestUrl, res);
-      }
-
-      if (req.method === "POST" && requestUrl.pathname === "/webhook") {
-        return handleWebhookEvent(req, res);
-      }
-
-      if (req.method === "GET" && requestUrl.pathname === "/leads") {
-        return sendJson(res, 200, getLeads());
-      }
-
-      if (req.method === "GET" && requestUrl.pathname === "/sessions") {
-        return sendJson(res, 200, getSessions());
-      }
-
-      return sendJson(res, 404, { error: "Route not found" });
-    } catch (error) {
-      console.error("HTTP server error:", error);
-
-      return sendJson(res, 500, {
-        error: "Internal server error",
-      });
-    }
-  };
+    req.on("error", reject);
+  });
 }
 
+/**
+ * Verificación de webhook (Meta)
+ */
 function handleWebhookVerification(requestUrl, res) {
-  const verifyToken =
-    process.env.WHATSAPP_VERIFY_TOKEN || "caceres_risk_bot_2026";
+  const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 
   const mode = requestUrl.searchParams.get("hub.mode");
   const token = requestUrl.searchParams.get("hub.verify_token");
   const challenge = requestUrl.searchParams.get("hub.challenge");
 
-  if (mode === "subscribe" && token === verifyToken && challenge) {
-    console.log("WEBHOOK VERIFICADO");
-    return sendPlainText(res, 200, challenge);
+  if (mode === "subscribe" && token === VERIFY_TOKEN) {
+    console.log("✅ WEBHOOK VERIFICADO CORRECTAMENTE");
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    return res.end(challenge);
   }
 
-  console.warn("Webhook verification failed", {
+  console.warn("❌ Webhook verification failed", {
     mode,
-    tokenMatches: token === verifyToken,
-    hasChallenge: Boolean(challenge),
+    tokenMatches: token === VERIFY_TOKEN,
+    received: token,
   });
 
-  return sendPlainText(res, 403, "Forbidden");
+  return sendText(res, 403, "Forbidden");
 }
 
+/**
+ * Recepción de eventos (mensajes)
+ */
 async function handleWebhookEvent(req, res) {
-  const body = await parseJsonBody(req);
-  const messages = extractIncomingMessages(body);
+  try {
+    const body = await parseJsonBody(req);
 
-  if (!messages.length) {
-    return sendJson(res, 200, {
-      ok: true,
-      received: true,
-      messages: 0,
-    });
+    // Log completo para debug
+    console.log("📩 Evento recibido de WhatsApp:");
+    console.dir(body, { depth: null });
+
+    const message = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+
+    if (message) {
+      const from = message.from;
+      const text = message.text?.body;
+
+      console.log("📨 Mensaje entrante:", {
+        from,
+        text,
+      });
+
+      // Aquí luego conectas tu flujo (insuranceFlow, etc)
+    }
+
+    return sendJson(res, 200, { status: "received" });
+  } catch (error) {
+    console.error("❌ Error procesando evento:", error);
+    return sendJson(res, 500, { error: "Internal server error" });
   }
+}
 
-  for (const message of messages) {
-    await processIncomingMessage(message);
-  }
+/**
+ * Servidor principal
+ */
+export function createServerHandler() {
+  return async (req, res) => {
+    try {
+      const requestUrl = new URL(req.url, `http://${req.headers.host}`);
 
-  return sendJson(res, 200, {
-    ok: true,
-    received: true,
-    messages: messages.length,
+      // --- GET → Verificación ---
+      if (req.method === "GET" && requestUrl.pathname === "/webhook") {
+        return handleWebhookVerification(requestUrl, res);
+      }
+
+      // --- POST → Eventos ---
+      if (req.method === "POST" && requestUrl.pathname === "/webhook") {
+        return handleWebhookEvent(req, res);
+      }
+
+      return sendJson(res, 404, { error: "Route not found" });
+    } catch (error) {
+      console.error("❌ HTTP server error:", error);
+      return sendJson(res, 500, { error: "Internal server error" });
+    }
+  };
+}
+
+/**
+ * Levantar servidor
+ */
+export function startServer() {
+  const port = process.env.PORT || 10000;
+
+  const server = http.createServer(createServerHandler());
+
+  server.listen(port, () => {
+    console.log(`🚀 WhatsApp chatbot corriendo en puerto ${port}`);
   });
 }
-
-async function processIncomingMessage(message) {
-  const user = {
-    userId: message.from,
-    phoneNumber: message.from,
-    profileName: message.profileName || "",
-  };
-
-  const incomingText = String(message.text || "").trim();
-
-  if (!incomingText) {
-    return;
-  }
-
-  const session = getSessionByUserId(user.userId);
-  const result = await handleIncomingText(user, incomingText, session);
-
-  const replies = Array.isArray(result.replies)
-    ? result.replies
-    : [String(result.replies || "")];
-
-  for (const reply of replies) {
-    if (reply && reply.trim()) {
-      await sendTextMessage(user.phoneNumber, reply.trim());
-    }
-  }
-}
-
-module.exports = {
-  createServerHandler,
-};
