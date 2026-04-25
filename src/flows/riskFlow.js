@@ -8,11 +8,55 @@ const {
   normalizeSquareMeters,
 } = require("../utils/risk");
 
-const { upsertSession, createLeadFromSession } = require("../services/storageService");
+const {
+  upsertSession,
+  createLeadFromSession,
+} = require("../services/storageService");
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+const MODEL = process.env.OPENAI_MODEL || "gpt-5.5";
+
+const SYSTEM_PROMPT = `
+Eres un asistente consultivo de Cáceres & Casio especializado en análisis de riesgo personal y patrimonial.
+
+Tu función no es vender, cotizar ni explicar productos.
+Tu función es ayudar al usuario a ver lo que no está considerando.
+
+Antes de responder, identifica el riesgo implícito en lo que el usuario dice.
+Si no hay suficiente contexto, pregunta.
+Si hay riesgo, hazlo visible sin imponer.
+
+No asumas. No seas complaciente. No respondas en automático.
+
+Prioriza preguntas que amplíen la perspectiva del usuario.
+Solo ofrece observaciones si aportan claridad real.
+
+Tu tono es sobrio, firme y respetuoso.
+No confrontas, pero tampoco suavizas la realidad.
+
+Generas incomodidad inteligente: haces pensar sin hacer sentir mal.
+
+No sigues una estructura fija.
+Te adaptas al contexto.
+
+A veces preguntas.
+A veces observas y preguntas.
+A veces sintetizas.
+
+Nunca hablas de productos, precios o cotizaciones.
+Si el usuario intenta ir ahí, rediriges hacia el entendimiento del riesgo.
+
+El usuario no busca información.
+Opera con una percepción incompleta.
+
+Tu función es revelar ese punto ciego.
+
+No conduzcas a una venta.
+Conduce a una realización.
+`;
 
 const STEPS = {
   INITIAL: "initial",
@@ -23,7 +67,8 @@ const STEPS = {
 };
 
 const INITIAL_MESSAGE = `Esto no es un seguro.
-Es una forma de entender cuánto dinero podrías perder sin darte cuenta.
+
+Es una forma de entender cuánto podrías perder sin darte cuenta.
 
 Te voy a hacer 3 preguntas.`;
 
@@ -41,109 +86,125 @@ function createEmptySession(user) {
     lastEstimate: null,
     isQualifiedLead: false,
     requiresHumanFollowUp: false,
-    updatedAt: new Date().toISOString(),
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 }
 
-async function generateAIReply(text) {
+function normalizeText(text) {
+  return String(text || "").trim();
+}
+
+function wantsAnalyze(text) {
+  const clean = normalizeText(text).toLowerCase();
+
+  return [
+    "analizar",
+    "analiza",
+    "quiero analizar",
+    "verlo bien",
+    "revisar",
+    "asesor",
+    "contacto",
+    "humano",
+  ].some((phrase) => clean.includes(phrase));
+}
+
+async function generateAIReply(userText) {
+  const text = normalizeText(userText);
+
+  if (!text) {
+    return "Para entender bien el riesgo, necesito que me compartas un poco más de contexto.";
+  }
+
   try {
-    const response = await openai.responses.create({
-      model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
-      instructions: `
-Eres el sistema conversacional de Cáceres & Casio | Consultoría en Riesgos.
-
-No eres agente.
-No eres broker.
-No vendes seguros.
-No cotizas.
-Interpretas el riesgo antes de cualquier decisión.
-
-Principio central:
-El riesgo no se ve. Se entiende.
-
-Objetivo:
-Controlar la conversación.
-Filtrar usuarios de bajo nivel.
-Elevar hacia riesgo, no producto.
-Detectar decisores reales.
-Llevar a sesión consultiva solo cuando haya nivel suficiente.
-
-Reglas:
-- Nunca cotizar.
-- Nunca dar precios ni rangos.
-- Nunca explicar productos o coberturas.
-- No sonar vendedor.
-- No sonar soporte.
-- No perseguir.
-- Reencuadra siempre hacia riesgo.
-- Si el evento ya ocurrió, aclara que ningún esquema entra hacia atrás.
-- Si hay intención ilegal, fraude, ocultar dinero o evadir autoridades, rechaza con firmeza.
-- Si hay insultos, mantén calma y corta si sigue.
-
-Tono:
-Sobrio, claro, profesional, natural.
-Estilo WhatsApp mexicano.
-Máximo 5 líneas.
-      `,
-      input: `Mensaje del usuario: ${text}`,
-      max_output_tokens: 180,
+    const completion = await openai.chat.completions.create({
+      model: MODEL,
+      temperature: 0.7,
+      max_tokens: 220,
+      messages: [
+        {
+          role: "system",
+          content: SYSTEM_PROMPT,
+        },
+        {
+          role: "user",
+          content: text,
+        },
+      ],
     });
 
     return (
-      response.output_text?.trim() ||
-      "Va. Para ubicarte bien: ¿esto lo estás viendo por algo que pasó, por prevención o porque estás comparando opciones?"
+      completion.choices?.[0]?.message?.content?.trim() ||
+      "Antes de responder, necesito entender mejor qué está en juego para ti."
     );
   } catch (error) {
-    console.error("ERROR OPENAI:", error.message);
-    return "Va. Para ubicarte bien: ¿esto lo estás viendo por algo que pasó, por prevención o porque estás comparando opciones?";
+    console.error("OpenAI error:", error.message);
+
+    return "Antes de avanzar, vale la pena entender bien el riesgo. ¿Qué es lo que más te preocupa de esa vivienda?";
   }
 }
 
-function buildPromptForStep(step) {
-  if (step === STEPS.LOCATION) return "1/3. Escribe tu ubicación.";
-  if (step === STEPS.SQUARE_METERS) return "2/3. Indica los metros cuadrados: 50 / 80 / 120 / 200 / +";
-  if (step === STEPS.CONSTRUCTION_TYPE) return "3/3. Indica el tipo de construcción: concreto / mixto / ligero";
-  return "";
-}
-
-function startFlow(user, session) {
-  const activeSession = session || createEmptySession(user);
-  activeSession.currentStep = STEPS.LOCATION;
-  upsertSession(activeSession);
-
-  return [INITIAL_MESSAGE, buildPromptForStep(STEPS.LOCATION)];
-}
-
-function processLocation(session, text) {
-  if (!text.trim()) {
-    return { replies: ["Necesito la ubicación para continuar."], session };
-  }
-
-  session.answers.ubicacion = text;
-  session.currentStep = STEPS.SQUARE_METERS;
+function processInitial(session) {
+  session.currentStep = STEPS.LOCATION;
   session.updatedAt = new Date().toISOString();
   upsertSession(session);
 
-  return { replies: [buildPromptForStep(STEPS.SQUARE_METERS)], session };
+  return {
+    replies: [
+      INITIAL_MESSAGE,
+      "Primera pregunta: ¿en qué ciudad o zona se encuentra la vivienda?",
+    ],
+    session,
+  };
 }
 
-function processSquareMeters(session, text) {
-  const meters = normalizeSquareMeters(text, config.risk.plusSquareMetersFallback);
+function processLocation(session, text) {
+  const location = normalizeText(text);
 
-  if (!meters) {
+  if (!location) {
     return {
-      replies: ["Respuesta no válida. Usa: 50 / 80 / 120 / 200 / +"],
+      replies: ["Necesito la ubicación aproximada de la vivienda para entender mejor el contexto de riesgo."],
       session,
     };
   }
 
-  session.answers.metrosCuadrados = meters;
+  session.answers.ubicacion = location;
+  session.currentStep = STEPS.SQUARE_METERS;
+  session.updatedAt = new Date().toISOString();
+  upsertSession(session);
+
+  return {
+    replies: [
+      "Bien.",
+      "Segunda pregunta: ¿cuántos metros cuadrados aproximados tiene la construcción?",
+    ],
+    session,
+  };
+}
+
+function processSquareMeters(session, text) {
+  const squareMeters = normalizeSquareMeters(text);
+
+  if (!squareMeters) {
+    return {
+      replies: ["Dame solo un número aproximado de metros cuadrados. No tiene que ser exacto."],
+      session,
+    };
+  }
+
+  session.answers.metrosCuadrados = squareMeters;
   session.currentStep = STEPS.CONSTRUCTION_TYPE;
   session.updatedAt = new Date().toISOString();
   upsertSession(session);
 
-  return { replies: [buildPromptForStep(STEPS.CONSTRUCTION_TYPE)], session };
+  return {
+    replies: [
+      "Perfecto.",
+      "Tercera pregunta: ¿de qué tipo de construcción es principalmente? Por ejemplo: concreto, tabique, madera, lámina o mixto.",
+    ],
+    session,
+  };
 }
 
 function processConstructionType(session, text) {
@@ -151,12 +212,15 @@ function processConstructionType(session, text) {
 
   if (!material) {
     return {
-      replies: ["Respuesta no válida. Usa: concreto / mixto / ligero"],
+      replies: [
+        "Necesito una idea general del tipo de construcción: concreto, tabique, madera, lámina o mixto.",
+      ],
       session,
     };
   }
 
   session.answers.tipoConstruccion = material;
+
   session.lastEstimate = calculateRiskEstimate({
     squareMeters: session.answers.metrosCuadrados,
     material,
@@ -166,6 +230,7 @@ function processConstructionType(session, text) {
 
   session.currentStep = STEPS.COMPLETED;
   session.updatedAt = new Date().toISOString();
+
   upsertSession(session);
 
   return {
@@ -176,7 +241,7 @@ function processConstructionType(session, text) {
         squareMeters: session.answers.metrosCuadrados,
         material,
       }),
-      "Esto no es recomendación. Es advertencia.\nSi quieres verlo bien, escribe: ANALIZAR",
+      "Esto no es recomendación. Es advertencia.\n\nSi quieres verlo bien, escribe: ANALIZAR",
     ],
     session,
   };
@@ -186,27 +251,26 @@ function processAnalyze(session) {
   session.isQualifiedLead = true;
   session.requiresHumanFollowUp = true;
   session.updatedAt = new Date().toISOString();
-  upsertSession(session);
 
-  const lead = createLeadFromSession(session);
+  upsertSession(session);
+  createLeadFromSession(session);
 
   return {
-    replies: [`Caso registrado.\nFolio: ${lead.leadId}`],
+    replies: [
+      "Bien. Aquí ya no conviene responder rápido.",
+      "La pregunta importante no es cuánto cuesta proteger la vivienda, sino cuánto podrías absorber si algo ocurre sin estar preparado.",
+      "Un asesor puede revisar el caso contigo con más contexto.",
+    ],
     session,
   };
 }
 
 async function handleIncomingText(user, incomingText, session) {
-  const text = (incomingText || "").trim();
-  const normalizedText = text.toUpperCase();
+  const text = normalizeText(incomingText);
   const activeSession = session || createEmptySession(user);
 
-  if (!session || !session.currentStep) {
-    return { replies: startFlow(user, activeSession), session: activeSession };
-  }
-
-  if (normalizedText === "ANALIZAR" && activeSession.lastEstimate) {
-    return processAnalyze(activeSession);
+  if (activeSession.currentStep === STEPS.INITIAL) {
+    return processInitial(activeSession);
   }
 
   if (activeSession.currentStep === STEPS.LOCATION) {
@@ -222,14 +286,26 @@ async function handleIncomingText(user, incomingText, session) {
   }
 
   if (activeSession.currentStep === STEPS.COMPLETED) {
+    if (wantsAnalyze(text)) {
+      return processAnalyze(activeSession);
+    }
+
     const aiReply = await generateAIReply(text);
-    return { replies: [aiReply], session: activeSession };
+
+    return {
+      replies: [aiReply],
+      session: activeSession,
+    };
   }
 
   const aiReply = await generateAIReply(text);
-  return { replies: [aiReply], session: activeSession };
+
+  return {
+    replies: [aiReply],
+    session: activeSession,
+  };
 }
 
 module.exports = {
   handleIncomingText,
-};s
+};
