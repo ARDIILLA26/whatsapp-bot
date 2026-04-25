@@ -1,11 +1,16 @@
 {
+  "name": "chatbot-whatsapp-business-caceres-casio",
+  "version": "1.0.0",
+  "description": "Chatbot funcional para WhatsApp Business Cloud API con calculo de riesgo economico basico y gestion de leads.",
+  "main": "index.js",
+  "type": "commonjs",
   "scripts": {
-    "start": "node app.js"
+    "start": "node index.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=18.0.0"
   },
   "dependencies": {
-    "express": "^4.18.2"
+    "openai": "^6.34.0"
   }
 }
