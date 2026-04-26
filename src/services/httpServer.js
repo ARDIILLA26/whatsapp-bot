@@ -6,6 +6,7 @@ function createServerHandler() {
     try {
       const parsedUrl = url.parse(req.url, true);
 
+      // 🔹 VERIFICACIÓN WEBHOOK META
       if (req.method === "GET" && parsedUrl.pathname === "/webhook") {
         const mode = parsedUrl.query["hub.mode"];
         const token = parsedUrl.query["hub.verify_token"];
@@ -21,6 +22,7 @@ function createServerHandler() {
         return res.end("Error de verificación");
       }
 
+      // 🔹 MENSAJES ENTRANTES
       if (req.method === "POST" && parsedUrl.pathname === "/webhook") {
         let body = "";
 
@@ -60,6 +62,7 @@ function createServerHandler() {
         return;
       }
 
+      // 🔹 RUTA BASE
       if (parsedUrl.pathname === "/") {
         res.writeHead(200);
         return res.end("Servidor funcionando");
@@ -67,6 +70,7 @@ function createServerHandler() {
 
       res.writeHead(404);
       res.end("Not Found");
+
     } catch (error) {
       console.error("Error en servidor:", error);
       res.writeHead(500);
@@ -75,4 +79,5 @@ function createServerHandler() {
   };
 }
 
+// ✅ EXPORT CORRECTO
 module.exports = { createServerHandler };
