@@ -1,5 +1,5 @@
 const http = require("http");
-const { createServerHandler } = require("./src/services/httpServer");
+const { createServerHandler } = require("./services/httpServer");
 
 const port = Number(process.env.PORT) || 10000;
 
