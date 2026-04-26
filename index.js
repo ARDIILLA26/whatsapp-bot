@@ -1,8 +1,8 @@
 const http = require("http");
 
-const { createServerHandler } = require("./services/httpServer");
-const { ensureDataFiles } = require("./services/storageService");
-const { loadEnvFile } = require("./utils/env");
+const { createServerHandler } = require("./src/services/httpServer");
+const { ensureDataFiles } = require("./src/services/storageService");
+const { loadEnvFile } = require("./src/utils/env");
 
 loadEnvFile();
 ensureDataFiles();
