@@ -1,59 +1,59 @@
 const url = require("url");
 
-function sendText(res, statusCode, text) {
-  res.writeHead(statusCode, { "Content-Type": "text/plain" });
-  res.end(text);
-}
+function createServerHandler() {
+  return (req, res) => {
+    try {
+      const parsedUrl = url.parse(req.url, true);
 
-function sendJson(res, statusCode, data) {
-  res.writeHead(statusCode, { "Content-Type": "application/json" });
-  res.end(JSON.stringify(data));
-}
+      // 🔹 WEBHOOK (VERIFICACIÓN META)
+      if (req.method === "GET" && parsedUrl.pathname === "/webhook") {
+        const mode = parsedUrl.query["hub.mode"];
+        const token = parsedUrl.query["hub.verify_token"];
+        const challenge = parsedUrl.query["hub.challenge"];
 
-function createServerHandler(req, res) {
-  const parsedUrl = url.parse(req.url, true);
+        if (mode === "subscribe" && token === process.env.VERIFY_TOKEN) {
+          console.log("Webhook verificado correctamente");
+          res.writeHead(200, { "Content-Type": "text/plain" });
+          return res.end(challenge);
+        } else {
+          res.writeHead(403);
+          return res.end("Error de verificación");
+        }
+      }
 
-  if (req.method === "GET" && parsedUrl.pathname === "/") {
-    return sendText(res, 200, "Servidor funcionando");
-  }
+      // 🔹 WEBHOOK (MENSAJES ENTRANTES)
+      if (req.method === "POST" && parsedUrl.pathname === "/webhook") {
+        let body = "";
 
-  if (req.method === "GET" && parsedUrl.pathname === "/health") {
-    return sendJson(res, 200, { ok: true });
-  }
+        req.on("data", chunk => {
+          body += chunk.toString();
+        });
 
-  if (req.method === "GET" && parsedUrl.pathname === "/webhook") {
-    const mode = parsedUrl.query["hub.mode"];
-    const token = parsedUrl.query["hub.verify_token"];
-    const challenge = parsedUrl.query["hub.challenge"];
+        req.on("end", () => {
+          console.log("Mensaje recibido:", body);
 
-    const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
+          res.writeHead(200);
+          res.end("EVENT_RECEIVED");
+        });
 
-    if (mode === "subscribe" && token === verifyToken) {
-      console.log("WEBHOOK VERIFICADO");
-      return sendText(res, 200, challenge);
+        return;
+      }
+
+      // 🔹 RUTA PRINCIPAL
+      if (parsedUrl.pathname === "/") {
+        res.writeHead(200);
+        return res.end("Servidor funcionando");
+      }
+
+      res.writeHead(404);
+      res.end("Not Found");
+
+    } catch (error) {
+      console.error("Error en servidor:", error);
+      res.writeHead(500);
+      res.end("Error interno");
     }
-
-    return sendText(res, 403, "Forbidden");
-  }
-
-  if (req.method === "POST" && parsedUrl.pathname === "/webhook") {
-    let body = "";
-
-    req.on("data", chunk => {
-      body += chunk.toString();
-    });
-
-    req.on("end", () => {
-      console.log("Evento recibido:", body);
-      return sendJson(res, 200, { received: true });
-    });
-
-    return;
-  }
-
-  return sendText(res, 404, "Ruta no encontrada");
+  };
 }
 
-module.exports = {
-  createServerHandler,
-};
+module.exports = { createServerHandler };
