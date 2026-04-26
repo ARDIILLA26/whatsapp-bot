@@ -3,7 +3,7 @@ async function sendWhatsAppMessage(to, text) {
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
   if (!token || !phoneNumberId) {
-    console.error("Faltan WHATSAPP_TOKEN o WHATSAPP_PHONE_NUMBER_ID");
+    console.error("Faltan variables de entorno");
     return;
   }
 
@@ -17,7 +17,7 @@ async function sendWhatsAppMessage(to, text) {
       },
       body: JSON.stringify({
         messaging_product: "whatsapp",
-        to,
+        to: to,
         type: "text",
         text: {
           body: text,
@@ -26,10 +26,8 @@ async function sendWhatsAppMessage(to, text) {
     }
   );
 
-  const result = await response.json();
-  console.log("Respuesta Meta:", result);
-
-  return result;
+  const data = await response.json();
+  console.log("Respuesta Meta:", data);
 }
 
 module.exports = { sendWhatsAppMessage };
