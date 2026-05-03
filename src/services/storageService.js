@@ -5,6 +5,8 @@ const { generateLeadId } = require("../utils/helpers");
 const dataDir = path.join(__dirname, "..", "data");
 const sessionsFile = path.join(dataDir, "sessions.json");
 const leadsFile = path.join(dataDir, "leads.json");
+const processedMessagesFile = path.join(dataDir, "processedMessages.json");
+const maxProcessedMessages = 1000;
 
 function ensureDataFiles() {
   if (!fs.existsSync(dataDir)) {
@@ -17,6 +19,10 @@ function ensureDataFiles() {
 
   if (!fs.existsSync(leadsFile)) {
     fs.writeFileSync(leadsFile, "[]", "utf8");
+  }
+
+  if (!fs.existsSync(processedMessagesFile)) {
+    fs.writeFileSync(processedMessagesFile, "[]", "utf8");
   }
 }
 
@@ -44,6 +50,10 @@ function getLeads() {
   return readJsonArray(leadsFile);
 }
 
+function getProcessedMessages() {
+  return readJsonArray(processedMessagesFile);
+}
+
 function getSessionByUserId(userId) {
   return getSessions().find((item) => item.userId === userId) || null;
 }
@@ -60,6 +70,24 @@ function upsertSession(session) {
 
   writeJsonArray(sessionsFile, sessions);
   return session;
+}
+
+function hasProcessedMessageId(messageId) {
+  return getProcessedMessages().some((item) => item.messageId === messageId);
+}
+
+function markProcessedMessageId(messageId, metadata = {}) {
+  const processedMessages = getProcessedMessages().filter((item) => item.messageId !== messageId);
+
+  processedMessages.push({
+    messageId,
+    from: metadata.from || "",
+    timestamp: metadata.timestamp || "",
+    processedAt: new Date().toISOString(),
+  });
+
+  const trimmedMessages = processedMessages.slice(-maxProcessedMessages);
+  writeJsonArray(processedMessagesFile, trimmedMessages);
 }
 
 function createLeadFromSession(session) {
@@ -105,7 +133,10 @@ module.exports = {
   ensureDataFiles,
   getSessions,
   getLeads,
+  getProcessedMessages,
   getSessionByUserId,
   upsertSession,
+  hasProcessedMessageId,
+  markProcessedMessageId,
   createLeadFromSession,
 };
