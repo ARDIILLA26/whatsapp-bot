@@ -1,5 +1,7 @@
 const url = require("url");
 const { sendWhatsAppMessage } = require("./whatsappService");
+const { handleIncomingText } = require("../flows/riskFlow");
+const { getSessionByUserId } = require("./storageService");
 
 function createServerHandler() {
   return (req, res) => {
@@ -45,9 +47,17 @@ function createServerHandler() {
               console.log("Mensaje:", text);
 
               if (from && text) {
+                const user = { userId: from, phoneNumber: from, profileName: "" };
+                const session = getSessionByUserId(from);
+                const result = await handleIncomingText(user, text, session);
+                const response =
+                  Array.isArray(result?.replies) && result.replies.length > 0
+                    ? result.replies.join("\n\n")
+                    : "Cáceres & Casio, consultoría en riesgos.\nAquí primero entendemos el riesgo y luego se decide.\n¿Qué traes en mente?";
+
                 await sendWhatsAppMessage(
                   from,
-                  "Recibí tu mensaje: " + text
+                  response
                 );
               }
             }
