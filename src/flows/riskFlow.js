@@ -28,6 +28,16 @@ const RESPONSES = {
   FALTA_DE_RESPETO: "Prefiero mantener la conversación con respeto.\nSi quieres revisarlo seriamente, con gusto lo vemos.",
 };
 
+const CONTINUATIONS = {
+  PATRIMONIO_REPEAT: "Entiendo, hablamos de una propiedad.\n¿Es casa habitación, inmueble en renta o patrimonio familiar?",
+  PATRIMONIO_DETAIL: "Perfecto.\nEntonces conviene revisar qué impacto tendría ese inmueble si algo pasa.\n¿Quieres verlo 20 min y ordenamos la situación?",
+  PRECIO_REPEAT: RESPONSES.INSISTE_EN_PRECIO,
+};
+
+const MEMORY_WINDOW_MS = 5 * 60 * 1000;
+
+const { upsertSession } = require("../services/storageService");
+
 function normalizeText(text) {
   return String(text || "")
     .toLowerCase()
@@ -37,6 +47,62 @@ function normalizeText(text) {
 
 function includesAny(text, words) {
   return words.some((word) => text.includes(word));
+}
+
+function createSession(user, session) {
+  return session || {
+    userId: user?.userId || "",
+    phoneNumber: user?.phoneNumber || "",
+    profileName: user?.profileName || "",
+  };
+}
+
+function isRecentRepeat(session, normalizedText, now) {
+  return (
+    session?.lastIncomingText === normalizedText &&
+    session?.lastIncomingAt &&
+    now - new Date(session.lastIncomingAt).getTime() < MEMORY_WINDOW_MS
+  );
+}
+
+function isPatrimonyTopic(normalizedText) {
+  return includesAny(normalizedText, ["casa", "propiedad", "inmueble"]);
+}
+
+function isPatrimonyDetail(normalizedText) {
+  return includesAny(normalizedText, ["propiedad", "casa habitacion", "renta", "patrimonio familiar"]);
+}
+
+function resolveContinuation(intent, normalizedText, session, now) {
+  const previousIntent = session?.lastIntent;
+  const repeatedText = isRecentRepeat(session, normalizedText, now);
+
+  if (previousIntent === "PATRIMONIO" && isPatrimonyDetail(normalizedText)) {
+    return CONTINUATIONS.PATRIMONIO_DETAIL;
+  }
+
+  if (previousIntent === "PATRIMONIO" && (repeatedText || isPatrimonyTopic(normalizedText))) {
+    return CONTINUATIONS.PATRIMONIO_REPEAT;
+  }
+
+  if (previousIntent === "PRECIO" && (repeatedText || intent === "PRECIO")) {
+    return CONTINUATIONS.PRECIO_REPEAT;
+  }
+
+  if (previousIntent === intent && repeatedText) {
+    return RESPONSES.NO_RESPONDE_CLARO;
+  }
+
+  return null;
+}
+
+function updateSessionMemory(session, normalizedText, intent, response) {
+  session.lastIncomingText = normalizedText;
+  session.lastIntent = intent;
+  session.lastResponse = response;
+  session.lastIncomingAt = new Date().toISOString();
+  session.updatedAt = session.lastIncomingAt;
+  upsertSession(session);
 }
 
 function classifyMessage(text) {
@@ -146,15 +212,17 @@ function classifyMessage(text) {
 }
 
 async function handleIncomingText(user, incomingText, session) {
+  const activeSession = createSession(user, session);
+  const normalizedText = normalizeText(incomingText);
   const intent = classifyMessage(incomingText);
+  const now = Date.now();
+  const response = resolveContinuation(intent, normalizedText, activeSession, now) || RESPONSES[intent];
+
+  updateSessionMemory(activeSession, normalizedText, intent, response);
 
   return {
-    replies: [RESPONSES[intent]],
-    session: session || {
-      userId: user?.userId || "",
-      phoneNumber: user?.phoneNumber || "",
-      profileName: user?.profileName || "",
-    },
+    replies: [response],
+    session: activeSession,
   };
 }
 
