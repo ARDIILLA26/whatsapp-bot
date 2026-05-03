@@ -19,6 +19,7 @@ const RESPONSES = {
   FAMILIA_CONTINUACION: "Correcto.\nEntonces conviene ordenar el riesgo familiar antes de decidir.\n¿Lo vemos 20 min y lo aterrizamos?",
   INFORMACION: "Claro.\nPara no mandarte información genérica, primero necesito ubicar el tipo de riesgo.\n¿Es personal, familiar, patrimonial o de empresa?",
   CITA: "Perfecto.\nAgendamos una revisión de 20 min.\nCompárteme tu nombre y el horario que prefieres.",
+  APPOINTMENT_DATA: "Perfecto.\nRegistro tu preferencia para la revisión.\nTe contactaremos para confirmar horario.",
   DESCONOCIDO: "Para orientarte bien, necesito ubicar el riesgo.\n¿Hablamos de algo personal, familiar, patrimonial o de empresa?",
 };
 
@@ -124,7 +125,7 @@ function resolveResponse(intent, normalizedText, session) {
   return RESPONSES[intent] || RESPONSES.DESCONOCIDO;
 }
 
-function updateSessionMemory(session, normalizedText, intent, response) {
+function updateSessionMemory(session, normalizedText, intent, response, awaiting = null) {
   const now = new Date().toISOString();
 
   session.lastIntent = intent;
@@ -132,6 +133,7 @@ function updateSessionMemory(session, normalizedText, intent, response) {
   session.lastResponse = response;
   session.lastIncomingAt = now;
   session.updatedAt = now;
+  session.awaiting = awaiting;
 
   upsertSession(session);
 }
@@ -139,10 +141,29 @@ function updateSessionMemory(session, normalizedText, intent, response) {
 async function handleIncomingText(user, incomingText, session) {
   const activeSession = createSession(user, session);
   const normalizedText = normalizeText(incomingText);
+
+  if (!normalizedText) {
+    return {
+      replies: [],
+      session: activeSession,
+    };
+  }
+
+  if (activeSession.awaiting === "APPOINTMENT_DATA") {
+    const response = RESPONSES.APPOINTMENT_DATA;
+    updateSessionMemory(activeSession, normalizedText, "CITA", response, null);
+
+    return {
+      replies: [response],
+      session: activeSession,
+    };
+  }
+
   const intent = classifyMessage(incomingText);
   const response = resolveResponse(intent, normalizedText, activeSession);
+  const awaiting = intent === "CITA" ? "APPOINTMENT_DATA" : null;
 
-  updateSessionMemory(activeSession, normalizedText, intent, response);
+  updateSessionMemory(activeSession, normalizedText, intent, response, awaiting);
 
   return {
     replies: [response],
