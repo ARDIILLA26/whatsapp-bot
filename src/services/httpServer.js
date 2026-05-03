@@ -3,6 +3,37 @@ const { sendWhatsAppMessage } = require("./whatsappService");
 const { handleIncomingText } = require("../flows/riskFlow");
 const { getSessionByUserId } = require("./storageService");
 
+const processedMessageIds = new Set();
+const MAX_PROCESSED_MESSAGES = 500;
+
+function buildMessageKey(message) {
+  if (message.id) {
+    return message.id;
+  }
+
+  const from = message.from || "";
+  const text = message.text?.body || "";
+  const timestamp = message.timestamp || "";
+
+  return `${from}:${text}:${timestamp}`;
+}
+
+function wasMessageProcessed(message) {
+  const messageKey = buildMessageKey(message);
+
+  if (processedMessageIds.has(messageKey)) {
+    return true;
+  }
+
+  processedMessageIds.add(messageKey);
+
+  if (processedMessageIds.size > MAX_PROCESSED_MESSAGES) {
+    processedMessageIds.clear();
+  }
+
+  return false;
+}
+
 function createServerHandler() {
   return (req, res) => {
     try {
@@ -47,6 +78,11 @@ function createServerHandler() {
               console.log("Mensaje:", text);
 
               if (from && text) {
+                if (wasMessageProcessed(message)) {
+                  console.log("Mensaje duplicado ignorado:", message.id || "sin-id");
+                  return;
+                }
+
                 const user = { userId: from, phoneNumber: from, profileName: "" };
                 const session = getSessionByUserId(from);
                 const result = await handleIncomingText(user, text, session);
