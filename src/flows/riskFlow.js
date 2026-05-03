@@ -1,42 +1,70 @@
+const { upsertSession } = require("../services/storageService");
+
 const RESPONSES = {
   SALUDO: "Cáceres & Casio, consultoría en riesgos.\nAquí primero entendemos el riesgo y luego se decide.\n¿Qué traes en mente?",
   PRECIO: "Claro, el precio es importante.\nPara orientarte bien, primero necesito entender qué quieres proteger.\n¿Qué situación te preocupa más?",
-  INSISTE_EN_PRECIO: "Te entiendo.\nPara darte una orientación útil, necesito ubicar primero la situación.\n¿Es algo personal, familiar, patrimonial o de empresa?",
-  MEJOR_PRECIO: "Entiendo que quieras cuidar el presupuesto.\nPrimero veamos qué necesitas proteger.\nAsí evitamos pagar por algo que no te sirva.",
-  INFORMES: "Claro.\nPara mandarte información útil, necesito saber qué quieres revisar.\n¿Es algo personal, familiar, patrimonial o de empresa?",
-  COBERTURAS: "Claro, podemos revisarlo.\nPrimero necesito entender qué situación quieres proteger.\n¿Qué te preocupa más?",
-  COMPARACION: "Está bien comparar.\nSolo hay que cuidar que la comparación realmente te ayude a decidir.\n¿Qué quieres proteger o resolver?",
+  PRECIO_CONTINUACION: "Te entiendo.\nPara darte una orientación útil, necesito ubicar primero la situación.\n¿Es algo personal, familiar, patrimonial o de empresa?",
+  PATRIMONIO_PROPIEDAD: "Entiendo, hablamos de una propiedad.\n¿Es casa habitación, inmueble en renta o patrimonio familiar?",
+  PATRIMONIO_PROPIEDAD_CONTINUACION: "Perfecto.\nEntonces conviene revisar qué impacto tendría ese inmueble si algo pasa.\n¿Quieres verlo 20 min y ordenamos la situación?",
+  PATRIMONIO_AUTO: "Entiendo, hablamos de un vehículo.\n¿Te preocupa más daño, robo, responsabilidad o que deje de operar?",
+  PATRIMONIO_AUTO_CONTINUACION: "Tiene sentido revisarlo.\nEn un vehículo, el riesgo no siempre está en el golpe; también está en el impacto económico.\n¿Lo vemos 20 min y lo ordenamos?",
+  PATRIMONIO_GENERAL: "Claro.\nPara cuidar tu patrimonio, primero ubicamos qué parte necesita más atención.\n¿Te preocupa más una propiedad, un auto o tu estabilidad económica?",
   EMPRESA: "Perfecto.\nEn empresa conviene revisar operación, personas, activos y consecuencias.\n¿Qué parte te preocupa más hoy?",
-  FAMILIA: "Entiendo.\nCuando se trata de familia, primero hay que ver qué quieres cuidar.\n¿Te preocupa más ingreso, salud o patrimonio?",
+  EMPRESA_CONTINUACION: "Tiene sentido revisarlo.\nAhí el riesgo no está solo en la póliza, sino en la operación.\n¿Lo vemos 20 min y lo ordenamos?",
   SALUD: "Claro.\nEn salud conviene revisar el impacto económico antes de decidir.\n¿La preocupación es por ti, tu familia o tu empresa?",
+  SALUD_CONTINUACION: "Tiene sentido.\nAntes de hablar de una solución, conviene medir qué impacto económico tendría.\n¿Lo vemos 20 min y lo ordenamos?",
   VIDA: "Entiendo.\nEn vida conviene revisar quién depende de tu ingreso.\n¿Quién necesitaría mayor respaldo si algo llegara a pasar?",
-  PATRIMONIO: "Claro.\nPara cuidar tu patrimonio, primero ubicamos qué parte necesita más atención.\n¿Te preocupa más una propiedad, un auto o tu estabilidad económica?",
-  YA_TIENE_SEGURO: "Perfecto, eso ayuda.\nPodemos revisar si lo que tienes sigue respondiendo a tu situación actual.\n¿Qué te gustaría revisar primero?",
-  NO_SABE: "Es normal empezar así.\nPrimero ordenamos la situación y después vemos qué conviene.\n¿Qué te preocupa más en este momento?",
-  CONFUSION: "Tiene sentido.\nCuando hay muchas opiniones, conviene ordenar la situación.\n¿Qué parte te está generando más duda?",
-  IMPACTO: "Eso ya es una señal importante.\nConviene revisarlo con calma antes de decidir.\n¿Quieres que lo veamos 20 min?",
-  URGENCIA: "Entiendo la urgencia.\nJusto por eso conviene decidir con claridad.\n¿Puedes revisarlo hoy 20 min?",
-  NO_TIENE_DINERO: "Te entiendo.\nCuando el presupuesto importa, conviene decidir con más cuidado.\n¿Qué situación te preocupa atender primero?",
-  OBJECION_DE_PAGO: "Lo entiendo.\nLa revisión solo tiene sentido si te ayuda a decidir mejor.\n¿Quieres verlo 20 min y después decides?",
-  TODO_POR_CHAT: "Por aquí puedo orientarte.\nPara una recomendación seria necesito más contexto.\n¿Quieres que lo revisemos 20 min?",
-  ERES_AGENTE: "Soy consultor en riesgos.\nPrimero reviso la situación y después vemos qué solución tiene sentido.\n¿Qué quieres proteger o resolver?",
-  REFERIDO: "Perfecto, gracias por escribirme.\nPara ayudarte bien, empecemos por entender la situación.\n¿Qué necesitas revisar?",
-  NO_RESPONDE_CLARO: "Vamos paso a paso.\nPara orientarte mejor, dime qué tema quieres revisar.\n¿Familia, salud, patrimonio o empresa?",
-  ACEPTA_CITA: "Perfecto.\nAgendamos una revisión de 20 min.\nCompárteme tu nombre y el horario que prefieres.",
-  NO_PUEDE_HOY_NI_MANANA: "Está bien.\nDime qué día te funciona esta semana.\nLo revisamos 20 min y ordenamos la situación.",
-  LO_VA_A_PENSAR: "Claro, tómate tu tiempo.\nSolo procura decidir con la información bien ordenada.\nCuando quieras, lo revisamos.",
-  FALTA_DE_RESPETO: "Prefiero mantener la conversación con respeto.\nSi quieres revisarlo seriamente, con gusto lo vemos.",
+  VIDA_CONTINUACION: "Tiene sentido.\nAquí no se trata de contratar algo rápido, sino de entender el impacto real.\n¿Lo vemos 20 min y lo ordenamos?",
+  FAMILIA: "Entiendo.\nCuando se trata de familia, primero hay que ver qué quieres cuidar.\n¿Te preocupa más ingreso, salud o patrimonio?",
+  FAMILIA_CONTINUACION: "Correcto.\nEntonces conviene ordenar el riesgo familiar antes de decidir.\n¿Lo vemos 20 min y lo aterrizamos?",
+  INFORMACION: "Claro.\nPara no mandarte información genérica, primero necesito ubicar el tipo de riesgo.\n¿Es personal, familiar, patrimonial o de empresa?",
+  CITA: "Perfecto.\nAgendamos una revisión de 20 min.\nCompárteme tu nombre y el horario que prefieres.",
+  DESCONOCIDO: "Para orientarte bien, necesito ubicar el riesgo.\n¿Hablamos de algo personal, familiar, patrimonial o de empresa?",
 };
 
-const CONTINUATIONS = {
-  PATRIMONIO_REPEAT: "Entiendo, hablamos de una propiedad.\n¿Es casa habitación, inmueble en renta o patrimonio familiar?",
-  PATRIMONIO_DETAIL: "Perfecto.\nEntonces conviene revisar qué impacto tendría ese inmueble si algo pasa.\n¿Quieres verlo 20 min y ordenamos la situación?",
-  PRECIO_REPEAT: RESPONSES.INSISTE_EN_PRECIO,
+const CONTINUATION_BY_INTENT = {
+  PRECIO: RESPONSES.PRECIO_CONTINUACION,
+  PATRIMONIO_PROPIEDAD: RESPONSES.PATRIMONIO_PROPIEDAD_CONTINUACION,
+  PATRIMONIO_AUTO: RESPONSES.PATRIMONIO_AUTO_CONTINUACION,
+  EMPRESA: RESPONSES.EMPRESA_CONTINUACION,
+  SALUD: RESPONSES.SALUD_CONTINUACION,
+  VIDA: RESPONSES.VIDA_CONTINUACION,
+  FAMILIA: RESPONSES.FAMILIA_CONTINUACION,
+  PATRIMONIO_GENERAL: RESPONSES.DESCONOCIDO,
+  INFORMACION: RESPONSES.DESCONOCIDO,
+  SALUDO: RESPONSES.DESCONOCIDO,
+  DESCONOCIDO: RESPONSES.DESCONOCIDO,
 };
+
+const KEYWORDS = {
+  SALUDO: ["hola", "buenas", "buen dia", "buenas tardes", "buenas noches"],
+  PRECIO: ["precio", "cuesta", "costo", "cuanto", "cotizacion", "cotizar", "barato", "mensualidad", "pago"],
+  PATRIMONIO_PROPIEDAD: ["casa", "propiedad", "inmueble", "departamento", "terreno", "edificio", "local", "bodega", "renta", "rentada", "hipotecada"],
+  PATRIMONIO_AUTO: ["auto", "coche", "carro", "vehiculo", "camioneta", "flotilla", "moto", "transporte"],
+  PATRIMONIO_GENERAL: ["patrimonio", "bienes", "estabilidad economica", "dinero", "ahorro", "inversion", "inversiones"],
+  EMPRESA: ["empresa", "negocio", "empleados", "operacion", "operaciones", "oficina", "maquinaria", "inventario", "responsabilidad", "director", "socio", "pyme"],
+  SALUD: ["salud", "hospital", "gastos medicos", "enfermedad", "accidente", "doctor", "clinica", "tratamiento"],
+  VIDA: ["vida", "fallecimiento", "muerte", "ingreso", "depende de mi", "dependen de mi", "familia depende", "respaldo"],
+  FAMILIA: ["familia", "hijos", "esposa", "esposo", "padres", "mama", "papa", "pareja"],
+  INFORMACION: ["informacion", "informes", "solo quiero informacion", "quiero saber", "mandame informacion"],
+  CITA: ["cita", "reunion", "llamada", "agenda", "agendar", "hablar", "asesoria", "consulta", "revision", "diagnostico"],
+};
+
+const INTENT_PRIORITY = [
+  "CITA",
+  "INFORMACION",
+  "PRECIO",
+  "PATRIMONIO_AUTO",
+  "PATRIMONIO_PROPIEDAD",
+  "EMPRESA",
+  "SALUD",
+  "VIDA",
+  "FAMILIA",
+  "PATRIMONIO_GENERAL",
+  "SALUDO",
+];
 
 const MEMORY_WINDOW_MS = 5 * 60 * 1000;
-
-const { upsertSession } = require("../services/storageService");
 
 function normalizeText(text) {
   return String(text || "")
@@ -57,166 +85,62 @@ function createSession(user, session) {
   };
 }
 
-function isRecentRepeat(session, normalizedText, now) {
+function classifyMessage(text) {
+  const normalizedText = normalizeText(text);
+
+  for (const intent of INTENT_PRIORITY) {
+    if (includesAny(normalizedText, KEYWORDS[intent])) {
+      return intent;
+    }
+  }
+
+  return "DESCONOCIDO";
+}
+
+function isRecentExactRepeat(session, normalizedText, now) {
+  if (!session?.lastIncomingText || !session?.lastIncomingAt) {
+    return false;
+  }
+
   return (
-    session?.lastIncomingText === normalizedText &&
-    session?.lastIncomingAt &&
+    session.lastIncomingText === normalizedText &&
     now - new Date(session.lastIncomingAt).getTime() < MEMORY_WINDOW_MS
   );
 }
 
-function isPatrimonyTopic(normalizedText) {
-  return includesAny(normalizedText, ["casa", "propiedad", "inmueble"]);
-}
-
-function isPatrimonyDetail(normalizedText) {
-  return includesAny(normalizedText, ["propiedad", "casa habitacion", "renta", "patrimonio familiar"]);
-}
-
-function resolveContinuation(intent, normalizedText, session, now) {
+function resolveResponse(intent, normalizedText, session) {
+  const now = Date.now();
   const previousIntent = session?.lastIntent;
-  const repeatedText = isRecentRepeat(session, normalizedText, now);
+  const repeatedText = isRecentExactRepeat(session, normalizedText, now);
 
-  if (previousIntent === "PATRIMONIO" && isPatrimonyDetail(normalizedText)) {
-    return CONTINUATIONS.PATRIMONIO_DETAIL;
+  if (repeatedText && previousIntent) {
+    return CONTINUATION_BY_INTENT[previousIntent] || RESPONSES.DESCONOCIDO;
   }
 
-  if (previousIntent === "PATRIMONIO" && (repeatedText || isPatrimonyTopic(normalizedText))) {
-    return CONTINUATIONS.PATRIMONIO_REPEAT;
+  if (previousIntent === intent) {
+    return CONTINUATION_BY_INTENT[intent] || RESPONSES.DESCONOCIDO;
   }
 
-  if (previousIntent === "PRECIO" && (repeatedText || intent === "PRECIO")) {
-    return CONTINUATIONS.PRECIO_REPEAT;
-  }
-
-  if (previousIntent === intent && repeatedText) {
-    return RESPONSES.NO_RESPONDE_CLARO;
-  }
-
-  return null;
+  return RESPONSES[intent] || RESPONSES.DESCONOCIDO;
 }
 
 function updateSessionMemory(session, normalizedText, intent, response) {
-  session.lastIncomingText = normalizedText;
+  const now = new Date().toISOString();
+
   session.lastIntent = intent;
+  session.lastIncomingText = normalizedText;
   session.lastResponse = response;
-  session.lastIncomingAt = new Date().toISOString();
-  session.updatedAt = session.lastIncomingAt;
+  session.lastIncomingAt = now;
+  session.updatedAt = now;
+
   upsertSession(session);
-}
-
-function classifyMessage(text) {
-  const normalized = normalizeText(text);
-
-  if (!normalized || includesAny(normalized, ["hola", "buen dia", "buenas", "hey", "que tal"])) {
-    return "SALUDO";
-  }
-
-  if (includesAny(normalized, ["pendej", "idiot", "estupid", "ching", "vete", "callate"])) {
-    return "FALTA_DE_RESPETO";
-  }
-
-  if (includesAny(normalized, ["me refirio", "referido", "me recomendaron", "vengo de parte"])) {
-    return "REFERIDO";
-  }
-
-  if (includesAny(normalized, ["agendar", "agenda", "cita", "reunion", "llamada", "20 min", "veamoslo", "lo revisamos"])) {
-    return "ACEPTA_CITA";
-  }
-
-  if (includesAny(normalized, ["no puedo hoy", "no puedo manana", "otro dia", "esta semana"])) {
-    return "NO_PUEDE_HOY_NI_MANANA";
-  }
-
-  if (includesAny(normalized, ["lo pienso", "lo voy a pensar", "despues", "luego te digo"])) {
-    return "LO_VA_A_PENSAR";
-  }
-
-  if (includesAny(normalized, ["eres agente", "son agentes", "broker", "vendes seguros", "vendedor"])) {
-    return "ERES_AGENTE";
-  }
-
-  if (includesAny(normalized, ["por chat", "aqui mismo", "por aqui", "mandamelo aqui"])) {
-    return "TODO_POR_CHAT";
-  }
-
-  if (includesAny(normalized, ["pagar consulta", "cobras", "costo de revision", "pagar por revisar"])) {
-    return "OBJECION_DE_PAGO";
-  }
-
-  if (includesAny(normalized, ["no tengo dinero", "sin dinero", "no me alcanza", "presupuesto bajo"])) {
-    return "NO_TIENE_DINERO";
-  }
-
-  if (includesAny(normalized, ["urgente", "hoy", "rapido", "ya", "me urge"])) {
-    return "URGENCIA";
-  }
-
-  if (includesAny(normalized, ["impacto", "perder", "perdida", "riesgo grande", "me preocupa mucho"])) {
-    return "IMPACTO";
-  }
-
-  if (includesAny(normalized, ["no entiendo", "confundido", "confusa", "duda", "muchas opiniones"])) {
-    return "CONFUSION";
-  }
-
-  if (includesAny(normalized, ["no se", "no estoy seguro", "no tengo claro", "orientame"])) {
-    return "NO_SABE";
-  }
-
-  if (includesAny(normalized, ["ya tengo seguro", "tengo seguro", "poliza", "mi seguro actual"])) {
-    return "YA_TIENE_SEGURO";
-  }
-
-  if (includesAny(normalized, ["patrimonio", "propiedad", "casa", "auto", "estabilidad economica"])) {
-    return "PATRIMONIO";
-  }
-
-  if (includesAny(normalized, ["vida", "fallezco", "muerte", "depende de mi ingreso"])) {
-    return "VIDA";
-  }
-
-  if (includesAny(normalized, ["salud", "gastos medicos", "hospital", "enfermedad"])) {
-    return "SALUD";
-  }
-
-  if (includesAny(normalized, ["familia", "hijos", "esposa", "esposo", "padres"])) {
-    return "FAMILIA";
-  }
-
-  if (includesAny(normalized, ["empresa", "negocio", "empleados", "activos", "operacion"])) {
-    return "EMPRESA";
-  }
-
-  if (includesAny(normalized, ["comparar", "comparacion", "aseguradora", "aseguradoras", "opciones"])) {
-    return "COMPARACION";
-  }
-
-  if (includesAny(normalized, ["cobertura", "coberturas", "que cubre", "incluye"])) {
-    return "COBERTURAS";
-  }
-
-  if (includesAny(normalized, ["informes", "informacion", "info", "mandame datos"])) {
-    return "INFORMES";
-  }
-
-  if (includesAny(normalized, ["mejor precio", "mas barato", "barato", "economico"])) {
-    return "MEJOR_PRECIO";
-  }
-
-  if (includesAny(normalized, ["precio", "cuanto cuesta", "cotiza", "cotizacion", "costo"])) {
-    return "PRECIO";
-  }
-
-  return "NO_RESPONDE_CLARO";
 }
 
 async function handleIncomingText(user, incomingText, session) {
   const activeSession = createSession(user, session);
   const normalizedText = normalizeText(incomingText);
   const intent = classifyMessage(incomingText);
-  const now = Date.now();
-  const response = resolveContinuation(intent, normalizedText, activeSession, now) || RESPONSES[intent];
+  const response = resolveResponse(intent, normalizedText, activeSession);
 
   updateSessionMemory(activeSession, normalizedText, intent, response);
 
