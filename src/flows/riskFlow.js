@@ -19,7 +19,7 @@ const RESPONSES = {
   FAMILIA_CONTINUACION: "Correcto.\nEntonces conviene ordenar el riesgo familiar antes de decidir.\n¿Lo vemos 20 min y lo aterrizamos?",
   INFORMACION: "Claro.\nPara no mandarte información genérica, primero necesito ubicar el tipo de riesgo.\n¿Es personal, familiar, patrimonial o de empresa?",
   CITA: "Perfecto.\nAgendamos una revisión de 20 min.\nCompárteme tu nombre y el horario que prefieres.",
-  APPOINTMENT_DATA: "Perfecto.\nRegistro tu preferencia para la revisión.\nTe contactaremos para confirmar horario.",
+  APPOINTMENT_DATA: "De acuerdo.\nRegistro tu preferencia para la revisión.\nTe contactaremos para confirmar horario.",
   DESCONOCIDO: "Para orientarte bien, necesito ubicar el riesgo.\n¿Hablamos de algo personal, familiar, patrimonial o de empresa?",
 };
 
@@ -66,12 +66,28 @@ const INTENT_PRIORITY = [
 ];
 
 const MEMORY_WINDOW_MS = 5 * 60 * 1000;
+const NON_NAME_WORDS = new Set(["ok", "okay", "si", "sí", "va", "sale", "gracias", "listo"]);
+const DAY_LABELS = {
+  manana: "mañana",
+  "pasado manana": "pasado mañana",
+  miercoles: "miércoles",
+  sabado: "sábado",
+};
+const DAY_WORDS = new Set(["hoy", "manana", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"]);
 
 function normalizeText(text) {
   return String(text || "")
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
+}
+
+function capitalizeWord(word) {
+  if (!word) {
+    return "";
+  }
+
+  return `${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`;
 }
 
 function includesAny(text, words) {
@@ -84,6 +100,38 @@ function createSession(user, session) {
     phoneNumber: user?.phoneNumber || "",
     profileName: user?.profileName || "",
   };
+}
+
+function extractAppointmentData(text) {
+  const rawText = String(text || "").trim();
+  const normalizedText = normalizeText(rawText);
+  const words = rawText.split(/\s+/).filter(Boolean);
+  const firstWord = words[0] || "";
+  const normalizedFirstWord = normalizeText(firstWord);
+  const likelyName = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+$/.test(firstWord) &&
+    !NON_NAME_WORDS.has(normalizedFirstWord) &&
+    !DAY_WORDS.has(normalizedFirstWord)
+    ? capitalizeWord(firstWord)
+    : "";
+  const dayMatch = normalizedText.match(/\b(hoy|manana|pasado manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b/);
+  const timeMatch = normalizedText.match(/\b([01]?\d|2[0-3])(?::([0-5]\d))?\s*(am|pm)?\b/);
+  const day = dayMatch ? DAY_LABELS[dayMatch[0]] || dayMatch[0] : "";
+  const hour = timeMatch ? timeMatch[0] : "";
+
+  return { likelyName, day, hour };
+}
+
+function buildAppointmentDataResponse(text) {
+  const { likelyName, day, hour } = extractAppointmentData(text);
+
+  if (!day || !hour) {
+    return RESPONSES.APPOINTMENT_DATA;
+  }
+
+  const greeting = likelyName ? `De acuerdo, ${likelyName}.` : "De acuerdo.";
+  const preference = `Tengo registrada tu preferencia para ${day} a las ${hour}.`;
+
+  return `${greeting}\n${preference}\nTe contactaremos para confirmar la revisión.`;
 }
 
 function classifyMessage(text) {
@@ -150,7 +198,7 @@ async function handleIncomingText(user, incomingText, session) {
   }
 
   if (activeSession.awaiting === "APPOINTMENT_DATA") {
-    const response = RESPONSES.APPOINTMENT_DATA;
+    const response = buildAppointmentDataResponse(incomingText);
     updateSessionMemory(activeSession, normalizedText, "CITA", response, null);
 
     return {
