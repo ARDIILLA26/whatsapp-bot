@@ -2,6 +2,41 @@ const fs = require("fs");
 const path = require("path");
 const { generateLeadId } = require("../utils/helpers");
 
+function sendLeadToGoogleSheets(lead) {
+  const webhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
+
+  if (!webhookUrl) {
+    console.log("GOOGLE_SHEETS_SKIPPED", JSON.stringify({ reason: "missing_webhook_url" }));
+    return;
+  }
+
+  if (typeof fetch !== "function") {
+    console.log("GOOGLE_SHEETS_SKIPPED", JSON.stringify({ reason: "fetch_not_available" }));
+    return;
+  }
+
+  fetch(webhookUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(lead),
+  })
+    .then(async (response) => {
+      const text = await response.text();
+      console.log("GOOGLE_SHEETS_SENT", JSON.stringify({
+        ok: response.ok,
+        status: response.status,
+        response: text.slice(0, 200),
+      }));
+    })
+    .catch((error) => {
+      console.error("GOOGLE_SHEETS_ERROR", JSON.stringify({
+        message: error.message,
+      }));
+    });
+}SFf
+
 const dataDir = path.join(__dirname, "..", "data");
 const sessionsFile = path.join(dataDir, "sessions.json");
 const leadsFile = path.join(dataDir, "leads.json");
@@ -186,6 +221,7 @@ function createLeadFromSession(session) {
     }));
 
     writeJsonArray(leadsFile, leads);
+    sendLeadToGoogleSheets(lead);
     return lead;
   } catch (error) {
     console.error("LEAD_SAVE_ERROR", JSON.stringify({
