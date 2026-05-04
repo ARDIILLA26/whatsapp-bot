@@ -90,40 +90,119 @@ function markProcessedMessageId(messageId, metadata = {}) {
   writeJsonArray(processedMessagesFile, trimmedMessages);
 }
 
-function createLeadFromSession(session) {
-  const leads = getLeads();
-  const existingLead = leads.find((item) => item.userId === session.userId && item.isQualifiedLead);
+function scoreLead(session) {
+  const intent = session.lastIntent || "DESCONOCIDO";
+  const tags = new Set(Array.isArray(session.leadTags) ? session.leadTags : []);
+  let score = 20;
+  let priority = "BAJA";
 
-  if (existingLead) {
-    return existingLead;
+  if (intent === "CITA" || intent === "APPOINTMENT_DATA") {
+    score = 90;
+    priority = "ALTA";
+  } else if (intent === "EMPRESA") {
+    score = 85;
+    priority = "ALTA";
+  } else if (intent === "PATRIMONIO_PROPIEDAD") {
+    score = 75;
+    priority = "MEDIA_ALTA";
+  } else if (intent === "PATRIMONIO_AUTO") {
+    score = 65;
+    priority = "MEDIA";
+  } else if (intent === "PATRIMONIO_GENERAL") {
+    score = 70;
+    priority = "MEDIA_ALTA";
+  } else if (intent === "SALUD" || intent === "VIDA") {
+    score = 65;
+    priority = "MEDIA";
+  } else if (intent === "FAMILIA") {
+    score = 60;
+    priority = "MEDIA";
+  } else if (intent === "INFORMACION") {
+    score = 45;
+    priority = "MEDIA_BAJA";
   }
 
-  const lead = {
-    leadId: generateLeadId(),
-    userId: session.userId,
-    phoneNumber: session.phoneNumber,
-    profileName: session.profileName,
-    answers: session.answers,
-    estimate: session.lastEstimate,
-    isQualifiedLead: true,
-    requiresHumanFollowUp: true,
-    humanHandoffSummary: buildHumanHandoffSummary(session),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+  if (intent === "PRECIO") {
+    score = session.repeatedPrice ? 30 : 45;
+    priority = session.repeatedPrice ? "BAJA" : "MEDIA_BAJA";
+
+    if (session.repeatedPrice) {
+      tags.add("posible_cazador_precio");
+    }
+  }
+
+  return {
+    score,
+    priority,
+    tags: Array.from(tags),
   };
+}
 
-  leads.push(lead);
-  writeJsonArray(leadsFile, leads);
+function createLeadFromSession(session) {
+  try {
+    const now = new Date().toISOString();
+    const leads = getLeads();
+    const index = leads.findIndex((item) =>
+      (session.userId && item.userId === session.userId) ||
+      (session.phoneNumber && item.phoneNumber === session.phoneNumber)
+    );
+    const existingLead = index >= 0 ? leads[index] : null;
+    const scoring = scoreLead(session);
+    const lead = {
+      ...(existingLead || {}),
+      leadId: existingLead?.leadId || generateLeadId(),
+      createdAt: existingLead?.createdAt || now,
+      updatedAt: now,
+      userId: session.userId || existingLead?.userId || "",
+      phoneNumber: session.phoneNumber || existingLead?.phoneNumber || "",
+      profileName: session.profileName || existingLead?.profileName || "",
+      lastMessage: session.lastMessage || "",
+      lastIntent: session.lastIntent || "DESCONOCIDO",
+      riskCategory: session.riskCategory || session.lastIntent || "DESCONOCIDO",
+      appointmentRequested: Boolean(session.appointmentRequested),
+      appointmentName: session.appointmentName || existingLead?.appointmentName || "",
+      appointmentDay: session.appointmentDay || existingLead?.appointmentDay || "",
+      appointmentTime: session.appointmentTime || existingLead?.appointmentTime || "",
+      priority: scoring.priority,
+      score: scoring.score,
+      tags: scoring.tags,
+      status: existingLead?.status || "NUEVO",
+    };
 
-  return lead;
+    if (index >= 0) {
+      leads[index] = lead;
+      console.log("LEAD_UPDATED", JSON.stringify({ userId: lead.userId, phoneNumber: lead.phoneNumber }));
+    } else {
+      leads.push(lead);
+      console.log("LEAD_CREATED", JSON.stringify({ userId: lead.userId, phoneNumber: lead.phoneNumber }));
+    }
+
+    console.log("LEAD_SCORED", JSON.stringify({
+      userId: lead.userId,
+      lastIntent: lead.lastIntent,
+      score: lead.score,
+      priority: lead.priority,
+      tags: lead.tags,
+    }));
+
+    writeJsonArray(leadsFile, leads);
+    return lead;
+  } catch (error) {
+    console.error("LEAD_SAVE_ERROR", JSON.stringify({
+      userId: session?.userId || "",
+      phoneNumber: session?.phoneNumber || "",
+      message: error.message,
+    }));
+    return null;
+  }
 }
 
 function buildHumanHandoffSummary(session) {
   return {
     reason: "Usuario solicito analisis real escribiendo ANALIZAR",
-    location: session.answers.ubicacion,
-    squareMeters: session.answers.metrosCuadrados,
-    constructionType: session.answers.tipoConstruccion,
+    location: session.answers?.ubicacion || "",
+    squareMeters: session.answers?.metrosCuadrados || "",
+    constructionType: session.answers?.tipoConstruccion || "",
     estimatedRiskValue: session.lastEstimate ? session.lastEstimate.estimatedValue : null,
     nextAction: "Contactar para validacion humana y analisis de caso real",
   };

@@ -82,6 +82,7 @@ function validateIncomingTextMessage(value) {
     from: message.from,
     text,
     timestamp: message.timestamp,
+    profileName: value.contacts?.[0]?.profile?.name || "",
   };
 }
 
@@ -102,7 +103,7 @@ async function processWebhookBody(body) {
     return;
   }
 
-  const { messageId, from, text, timestamp } = validation;
+  const { messageId, from, text, timestamp, profileName } = validation;
 
   console.log("MESSAGE_RECEIVED", JSON.stringify({
     messageId,
@@ -113,7 +114,7 @@ async function processWebhookBody(body) {
 
   markProcessedMessageId(messageId, { from, timestamp });
 
-  const user = { userId: from, phoneNumber: from, profileName: "", messageId, timestamp };
+  const user = { userId: from, phoneNumber: from, profileName, messageId, timestamp };
   const session = getSessionByUserId(from);
   const result = await handleIncomingText(user, text, session, { messageId, timestamp });
   const replies = Array.isArray(result?.replies)

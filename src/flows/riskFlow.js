@@ -1,4 +1,4 @@
-const { upsertSession } = require("../services/storageService");
+const { upsertSession, createLeadFromSession } = require("../services/storageService");
 
 const RESPONSES = {
   SALUDO: "Cáceres & Casio, consultoría en riesgos.\nAquí primero entendemos el riesgo y luego se decide.\n¿Qué traes en mente?",
@@ -173,10 +173,11 @@ function resolveResponse(intent, normalizedText, session) {
   return RESPONSES[intent] || RESPONSES.DESCONOCIDO;
 }
 
-function updateSessionMemory(session, normalizedText, intent, response, awaiting = null) {
+function updateSessionMemory(session, incomingText, normalizedText, intent, response, awaiting = null) {
   const now = new Date().toISOString();
 
   session.lastIntent = intent;
+  session.lastMessage = String(incomingText || "").trim();
   session.lastIncomingText = normalizedText;
   session.lastResponse = response;
   session.lastIncomingAt = now;
@@ -184,6 +185,7 @@ function updateSessionMemory(session, normalizedText, intent, response, awaiting
   session.awaiting = awaiting;
 
   upsertSession(session);
+  createLeadFromSession(session);
 }
 
 async function handleIncomingText(user, incomingText, session) {
@@ -198,8 +200,16 @@ async function handleIncomingText(user, incomingText, session) {
   }
 
   if (activeSession.awaiting === "APPOINTMENT_DATA") {
+    const appointmentData = extractAppointmentData(incomingText);
     const response = buildAppointmentDataResponse(incomingText);
-    updateSessionMemory(activeSession, normalizedText, "CITA", response, null);
+
+    activeSession.appointmentRequested = true;
+    activeSession.appointmentName = appointmentData.likelyName || activeSession.appointmentName || "";
+    activeSession.appointmentDay = appointmentData.day || activeSession.appointmentDay || "";
+    activeSession.appointmentTime = appointmentData.hour || activeSession.appointmentTime || "";
+    activeSession.riskCategory = "CITA";
+
+    updateSessionMemory(activeSession, incomingText, normalizedText, "APPOINTMENT_DATA", response, null);
 
     return {
       replies: [response],
@@ -210,8 +220,20 @@ async function handleIncomingText(user, incomingText, session) {
   const intent = classifyMessage(incomingText);
   const response = resolveResponse(intent, normalizedText, activeSession);
   const awaiting = intent === "CITA" ? "APPOINTMENT_DATA" : null;
+  const priceMentionCount = intent === "PRECIO"
+    ? Number(activeSession.priceMentionCount || 0) + 1
+    : Number(activeSession.priceMentionCount || 0);
 
-  updateSessionMemory(activeSession, normalizedText, intent, response, awaiting);
+  activeSession.priceMentionCount = priceMentionCount;
+  activeSession.repeatedPrice = intent === "PRECIO" && priceMentionCount > 1;
+
+  if (intent === "CITA") {
+    activeSession.appointmentRequested = true;
+  }
+
+  activeSession.riskCategory = intent === "CITA" ? "CITA" : intent;
+
+  updateSessionMemory(activeSession, incomingText, normalizedText, intent, response, awaiting);
 
   return {
     replies: [response],
