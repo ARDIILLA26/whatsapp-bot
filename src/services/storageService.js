@@ -186,7 +186,9 @@ function createLeadFromSession(session) {
     }));
 
     writeJsonArray(leadsFile, leads);
-    return lead;
+console.log("GOOGLE_SHEETS_CALLING", JSON.stringify({ userId: lead.userId, lastIntent: lead.lastIntent }));
+sendLeadToGoogleSheets(lead);
+return lead;
   } catch (error) {
     console.error("LEAD_SAVE_ERROR", JSON.stringify({
       userId: session?.userId || "",
