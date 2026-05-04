@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { generateLeadId } = require("../utils/helpers");
-
+const { sendLeadToGoogleSheets } = require("./googleSheetsService");
 const dataDir = path.join(__dirname, "..", "data");
 const sessionsFile = path.join(dataDir, "sessions.json");
 const leadsFile = path.join(dataDir, "leads.json");
