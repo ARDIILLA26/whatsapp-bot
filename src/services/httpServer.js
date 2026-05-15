@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const url = require("url");
 const { sendWhatsAppMessage } = require("./whatsappService");
 const { handleIncomingText } = require("../flows/riskFlow");
@@ -15,6 +16,55 @@ function logIgnored(reason, details = {}) {
 
 function extractValue(data) {
   return data?.entry?.[0]?.changes?.[0]?.value || null;
+}
+
+function validateMetaSignature(rawBody, signatureHeader) {
+  const appSecret = process.env.APP_SECRET;
+
+  if (!appSecret) {
+    console.error("Webhook signature validation unavailable");
+    return false;
+  }
+
+  if (!signatureHeader) {
+    console.warn("Webhook signature missing");
+    return false;
+  }
+
+  if (!signatureHeader.startsWith("sha256=")) {
+    console.warn("Webhook signature invalid");
+    return false;
+  }
+
+  const receivedSignature = signatureHeader.slice("sha256=".length);
+
+  if (!/^[a-f0-9]{64}$/i.test(receivedSignature)) {
+    console.warn("Webhook signature invalid");
+    return false;
+  }
+
+  const expectedSignature = crypto
+    .createHmac("sha256", appSecret)
+    .update(rawBody, "utf8")
+    .digest("hex");
+
+  const receivedBuffer = Buffer.from(receivedSignature, "hex");
+  const expectedBuffer = Buffer.from(expectedSignature, "hex");
+
+  if (receivedBuffer.length !== expectedBuffer.length) {
+    console.warn("Webhook signature invalid");
+    return false;
+  }
+
+  const isValid = crypto.timingSafeEqual(receivedBuffer, expectedBuffer);
+
+  if (!isValid) {
+    console.warn("Webhook signature invalid");
+    return false;
+  }
+
+  console.log("Webhook signature valid");
+  return true;
 }
 
 function validateIncomingTextMessage(value) {
@@ -167,10 +217,15 @@ function createServerHandler() {
         });
 
         req.on("end", async () => {
+          if (!validateMetaSignature(body, req.headers["x-hub-signature-256"])) {
+            res.writeHead(403);
+            return res.end("Invalid signature");
+          }
+
           try {
             await processWebhookBody(body);
-          } catch (error) {
-            console.error("Error procesando mensaje:", error);
+          } catch {
+            console.error("Error procesando mensaje");
           }
 
           res.writeHead(200);
