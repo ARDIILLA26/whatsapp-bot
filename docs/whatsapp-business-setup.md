@@ -12,11 +12,11 @@
 Configurar en `.env`:
 
 ```env
-META_VERIFY_TOKEN=token_seguro
-WHATSAPP_ACCESS_TOKEN=token_cloud_api
-WHATSAPP_PHONE_NUMBER_ID=phone_number_id
+VERIFY_TOKEN=<your_verify_token>
+WHATSAPP_TOKEN=<your_whatsapp_token>
+WHATSAPP_PHONE_NUMBER_ID=<your_phone_number_id>
 WHATSAPP_API_VERSION=v21.0
-APP_BASE_URL=https://tu-dominio-publico.com
+APP_BASE_URL=<your_private_url>
 ```
 
 ## 3. Webhook
@@ -24,7 +24,7 @@ APP_BASE_URL=https://tu-dominio-publico.com
 URL a registrar:
 
 ```text
-https://tu-dominio-publico.com/webhook
+<your_private_url>
 ```
 
 Metodo de verificacion:
