@@ -1,7 +1,7 @@
 const { upsertSession, createLeadFromSession } = require("../services/storageService");
 
 const RESPONSES = {
-  SALUDO: "Hola. Soy el asistente de Cáceres & Casio.\nAntes de hablar de seguros, necesito entender qué riesgo quieres revisar.\n¿Es personal, familiar, patrimonial o de empresa?",
+  SALUDO: "Hola. Soy el asistente de Cáceres & Casio.\n\nUna póliza no debería ser el punto de partida.\nPrimero necesitamos entender el riesgo que puede afectar tu decisión.\n\n¿Qué situación quieres revisar?",
   PRECIO: "Tiene sentido preguntar precio.\nPero sin entender el riesgo, el precio puede hacerte comparar mal.\n¿Qué quieres proteger: ingreso, familia, patrimonio, auto o empresa?",
   PRECIO_CONTINUACION: "Entiendo.\nSi en este momento solo buscas comparar precio, quizá no somos la mejor ruta.\nCáceres & Casio trabaja primero entendiendo el riesgo antes de decidir.",
   PATRIMONIO_PROPIEDAD: "Cuando hay patrimonio, el problema no es solo tener seguro.\nEl problema es no saber por dónde puede afectarse.\n¿Hablamos de inmuebles, ingresos, familia, empresa o responsabilidad?",
@@ -20,14 +20,17 @@ const RESPONSES = {
   FAMILIA: "Entiendo.\nPara responder bien, primero necesito ubicar el riesgo detrás de tu pregunta.\n¿Qué situación te preocupa o qué decisión estás por tomar?",
   FAMILIA_CONTINUACION: "Tiene sentido revisarlo en una llamada breve.\nPara ubicar bien el caso, dime tu nombre y qué día u horario te funciona.",
   INFORMACION: "Entiendo.\nPara responder bien, primero necesito ubicar el riesgo detrás de tu pregunta.\n¿Qué situación te preocupa o qué decisión estás por tomar?",
-  CITA: "Perfecto.\nPodemos hacer una revisión breve de 20 minutos.\nDime tu nombre y el horario que prefieres.",
+  CITA: "Podemos hacerlo.\nLa revisión inicial dura aproximadamente 20 minutos.\nDime tu nombre y el horario que prefieres.",
   APPOINTMENT_DATA: "Para agendarlo sin vueltas, dime solo dos datos:\ntu nombre y un horario posible.\nPor ejemplo: Franklin, mañana 11:00.",
-  APPOINTMENT_NEED_TIME: "Gracias, {name}.\nSolo falta el horario.\n¿Prefieres mañana por la mañana, tarde o propones una hora?",
-  APPOINTMENT_NEED_NAME: "Perfecto.\nSolo necesito tu nombre para registrar la revisión.\n¿A nombre de quién la agendamos?",
+  APPOINTMENT_NEED_TIME: "Gracias, {name}.\nSolo falta el horario.\n¿Prefieres mañana en la mañana, mañana en la tarde o propones una hora?",
+  APPOINTMENT_NEED_NAME: "De acuerdo.\nTengo el horario: {schedule}.\nSolo necesito tu nombre para registrar la revisión.",
+  APPOINTMENT_NEED_NAME_GENERIC: "De acuerdo.\nSolo necesito tu nombre para registrar la revisión.\n¿A nombre de quién la dejamos?",
+  APPOINTMENT_NEED_DAY: "Para registrarlo bien, dime el día y si es por la mañana o por la tarde.",
   APPOINTMENT_FLEXIBLE: "Podemos manejarlo sencillo.\nPropón una opción: mañana en la mañana, mañana en la tarde o pasado mañana.\nCon eso lo ubicamos.",
-  APPOINTMENT_DURATION: "La revisión inicial dura aproximadamente 20 minutos.\nSirve para ubicar el riesgo antes de hablar de opciones.\n¿Quieres que la agendemos?",
-  APPOINTMENT_COST: "La revisión inicial sirve para entender el caso.\nAntes de hablar de costos o soluciones, necesitamos ubicar el riesgo.\n¿Quieres agendarla?",
-  APPOINTMENT_URGENT: "Si es urgente, puedo registrar el caso para revisión prioritaria.\nDime tu nombre, tema y horario disponible para contacto.",
+  APPOINTMENT_DURATION: "La revisión inicial dura aproximadamente 20 minutos.\nSirve para ubicar el riesgo antes de hablar de opciones.\n¿Quieres que la registremos?",
+  APPOINTMENT_COST: "La revisión inicial sirve para entender el caso.\nAntes de hablar de costos o soluciones, necesitamos ubicar el riesgo.\n¿Quieres que registremos una revisión?",
+  APPOINTMENT_URGENT: "Si es urgente, puedo registrar el caso como prioritario.\nDime tu nombre, tema y horario disponible para contacto.",
+  APPOINTMENT_TODAY: "Puedo registrar el caso como prioritario.\nDime tu nombre y una hora aproximada para contacto.",
   APPOINTMENT_LINK: "Por ahora lo dejamos registrado por este medio.\nDime tu nombre y horario preferido, y te contactaremos para confirmar.",
   AGRESIVO: "Entiendo el punto.\nPara poder responder bien, necesito separar la molestia del riesgo que quieres resolver.\n¿Qué situación concreta quieres revisar?",
   AGRESIVO_CONTINUACION: "Puedo continuar si mantenemos la conversación enfocada.\nCáceres & Casio trabaja entendiendo el riesgo, no discutiendo por presión.\n¿Quieres revisar el caso o prefieres dejarlo aquí?",
@@ -82,13 +85,14 @@ const KEYWORDS = {
   APPOINTMENT_DURATION: ["cuanto dura la revision", "cuanto dura", "cuanto tiempo dura", "duracion de la revision"],
   APPOINTMENT_COST: ["tiene costo la revision", "cuanto cuesta la revision", "costo de la revision", "la revision cuesta"],
   APPOINTMENT_URGENT: ["llamada inmediata", "llamame ahora", "es urgente", "urgente"],
+  APPOINTMENT_TODAY: ["llamada hoy", "cita hoy", "revision hoy", "hablar hoy"],
   APPOINTMENT_LINK: ["mandame link", "tienes link", "link para agendar", "agenda aqui"],
   APPOINTMENT_FLEXIBLE: ["no se", "cuando puedas", "tu dime", "a que hora puedes"],
   REGION_NORTE: ["norte", "frontera", "monterrey", "chihuahua", "sonora", "tijuana", "reynosa", "transporte", "logistica", "industria", "calor"],
   REGION_BAJIO: ["bajio", "queretaro", "leon", "aguascalientes", "san luis potosi", "empresa familiar", "crecimiento"],
   REGION_CENTRO: ["cdmx", "ciudad de mexico", "estado de mexico", "edomex", "puebla", "movilidad", "densidad", "patrimonio urbano"],
   REGION_SURESTE: ["sureste", "merida", "cancun", "quintana roo", "yucatan", "tabasco", "veracruz", "turismo", "clima"],
-  SALUDO: ["hola", "buenas", "buen dia", "buenas tardes", "buenas noches"],
+  SALUDO: ["hola", "buenas", "buen dia", "buenos dias", "buenas tardes", "buenas noches", "que tal", "saludos"],
   PRECIO: ["precio", "cuesta", "costo", "cuanto", "cotizacion", "cotizar", "barato", "mensualidad", "pago"],
   PATRIMONIO_PROPIEDAD: ["casa", "propiedad", "inmueble", "departamento", "terreno", "edificio", "local", "bodega", "renta", "rentada", "hipotecada"],
   FLOTILLA: ["flotilla", "unidades", "vehiculos de empresa", "vehiculos de trabajo", "camiones", "rutas", "conductores"],
@@ -111,6 +115,7 @@ const INTENT_PRIORITY = [
   "APPOINTMENT_DURATION",
   "APPOINTMENT_COST",
   "APPOINTMENT_URGENT",
+  "APPOINTMENT_TODAY",
   "APPOINTMENT_LINK",
   "APPOINTMENT_FLEXIBLE",
   "CITA",
@@ -137,7 +142,8 @@ const INTENT_PRIORITY = [
 const MEMORY_WINDOW_MS = 5 * 60 * 1000;
 const NON_NAME_WORDS = new Set([
   "ok", "okay", "si", "sí", "va", "sale", "gracias", "listo",
-  "solo", "dame", "mejor", "quiero", "no", "de", "mi", "soy",
+  "solo", "dame", "mejor", "quiero", "no", "de", "mi", "soy", "es",
+  "hola", "buen", "buenas", "buenos", "saludos", "que", "qué",
   "empresario", "transportista", "médico", "medico", "abogado", "agente", "contador",
   "monterrey", "cdmx", "queretaro", "cancun", "cancún",
 ]);
@@ -197,13 +203,44 @@ function extractAppointmentData(text) {
   const dayMatch = normalizedText.match(/\b(hoy|manana|pasado manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b/);
   const rangeMatch = normalizedText.match(/\b(hoy|manana|pasado manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo)\s+(?:por|en|a)\s+la\s+(manana|tarde|noche)\b/);
   const timeMatch = normalizedText.match(/\b([01]?\d|2[0-3])(?::([0-5]\d))?\s*(am|pm)?\b/);
+  const standalonePeriodMatch = normalizedText.match(/\b(manana|tarde|noche)\b/);
   const day = dayMatch ? DAY_LABELS[dayMatch[0]] || dayMatch[0] : "";
-  const hour = timeMatch ? timeMatch[0] : "";
+  const hour = timeMatch ? formatHour(timeMatch[1], timeMatch[2], timeMatch[3], rangeMatch ? rangeMatch[2] : standalonePeriodMatch?.[1] || "") : "";
   const period = rangeMatch ? rangeMatch[2] : "";
-  const schedule = [day, hour || (period ? `en la ${period}` : "")].filter(Boolean).join(" ");
+  const schedule = formatSchedule(day, hour, period);
   const topic = resolveAppointmentTopic(normalizedText);
 
   return { likelyName, day, hour, period, schedule, topic };
+}
+
+function formatHour(hourText, minuteText = "", meridiem = "", period = "") {
+  const hour = Number(hourText);
+  const minutes = minuteText || "00";
+  const suffix = meridiem === "pm" || period === "tarde" || period === "noche"
+    ? " de la tarde"
+    : "";
+
+  return `${hour}:${minutes}${suffix}`;
+}
+
+function formatSchedule(day, hour, period) {
+  if (day && hour) {
+    return `${day} a las ${hour}`;
+  }
+
+  if (day && period) {
+    return `${day} en la ${period}`;
+  }
+
+  if (day) {
+    return day;
+  }
+
+  if (hour) {
+    return `a las ${hour}`;
+  }
+
+  return "";
 }
 
 function resolveAppointmentTopic(normalizedText) {
@@ -244,6 +281,10 @@ function buildAppointmentDataResponse(text, session = {}) {
     return RESPONSES.APPOINTMENT_URGENT;
   }
 
+  if (includesAny(normalizedText, KEYWORDS.APPOINTMENT_TODAY)) {
+    return RESPONSES.APPOINTMENT_TODAY;
+  }
+
   if (includesAny(normalizedText, KEYWORDS.APPOINTMENT_LINK)) {
     return RESPONSES.APPOINTMENT_LINK;
   }
@@ -252,8 +293,12 @@ function buildAppointmentDataResponse(text, session = {}) {
     return RESPONSES.APPOINTMENT_FLEXIBLE;
   }
 
-  const { likelyName, schedule, topic } = extractAppointmentData(text);
+  const { likelyName, day, hour, schedule, topic } = extractAppointmentData(text);
   const finalName = likelyName || session.appointmentName || "";
+
+  if (hour && !day) {
+    return RESPONSES.APPOINTMENT_NEED_DAY;
+  }
 
   if (!finalName && !schedule) {
     return RESPONSES.APPOINTMENT_DATA;
@@ -264,14 +309,14 @@ function buildAppointmentDataResponse(text, session = {}) {
   }
 
   if (!finalName && schedule) {
-    return RESPONSES.APPOINTMENT_NEED_NAME;
+    return RESPONSES.APPOINTMENT_NEED_NAME.replace("{schedule}", schedule);
   }
 
   const preference = topic
-    ? `Registro tu preferencia para ${schedule} sobre ${topic}.`
+    ? `Registro tu preferencia para ${schedule}, sobre ${topic}.`
     : `Registro tu preferencia para ${schedule}.`;
 
-  return `Perfecto, ${finalName}.\n${preference}\nTe contactaremos para confirmar la revisión.`;
+  return `Bien, ${finalName}.\n${preference}\nTe contactaremos para confirmar la revisión.`;
 }
 
 function classifyMessage(text) {
@@ -330,6 +375,7 @@ function shouldExitAppointmentData(intent) {
     "CURIOSO_BAJO",
     "EVASIVO",
     "SALIDA_ELEGANTE",
+    "SALUDO",
   ].includes(intent);
 }
 
@@ -393,7 +439,7 @@ async function handleIncomingText(user, incomingText, session) {
     const response = buildAppointmentDataResponse(incomingText, activeSession);
     const hasName = Boolean(appointmentData.likelyName || activeSession.appointmentName);
     const hasSchedule = Boolean(appointmentData.schedule || activeSession.appointmentDay || activeSession.appointmentTime);
-    const needsMoreAppointmentData = !hasName || !hasSchedule || response === RESPONSES.APPOINTMENT_FLEXIBLE;
+    const needsMoreAppointmentData = !hasName || !hasSchedule || response === RESPONSES.APPOINTMENT_FLEXIBLE || response === RESPONSES.APPOINTMENT_NEED_DAY;
 
     activeSession.appointmentRequested = true;
     activeSession.appointmentName = appointmentData.likelyName || activeSession.appointmentName || "";
@@ -410,6 +456,28 @@ async function handleIncomingText(user, incomingText, session) {
   }
 
   const intent = classifyMessage(incomingText);
+  const appointmentData = extractAppointmentData(incomingText);
+  const looksLikeAppointmentData = Boolean(appointmentData.likelyName || appointmentData.schedule);
+  const hasCompleteIncomingAppointmentData = Boolean(appointmentData.likelyName && appointmentData.schedule);
+
+  if (looksLikeAppointmentData && (!shouldExitAppointmentData(intent) || (hasCompleteIncomingAppointmentData && !shouldAlwaysExitAppointmentData(intent)))) {
+    const response = buildAppointmentDataResponse(incomingText, activeSession);
+    const needsMoreAppointmentData = !appointmentData.likelyName || !appointmentData.schedule || response === RESPONSES.APPOINTMENT_FLEXIBLE || response === RESPONSES.APPOINTMENT_NEED_DAY;
+
+    activeSession.appointmentRequested = true;
+    activeSession.appointmentName = appointmentData.likelyName || activeSession.appointmentName || "";
+    activeSession.appointmentDay = appointmentData.day || activeSession.appointmentDay || "";
+    activeSession.appointmentTime = appointmentData.hour || appointmentData.period || activeSession.appointmentTime || "";
+    activeSession.riskCategory = "CITA";
+
+    updateSessionMemory(activeSession, incomingText, normalizedText, "APPOINTMENT_DATA", response, needsMoreAppointmentData ? "APPOINTMENT_DATA" : null);
+
+    return {
+      replies: [response],
+      session: activeSession,
+    };
+  }
+
   const response = resolveResponse(intent, normalizedText, activeSession);
   const awaiting = intent === "CITA" || intent.startsWith("APPOINTMENT_") ? "APPOINTMENT_DATA" : null;
   const priceMentionCount = intent === "PRECIO"
