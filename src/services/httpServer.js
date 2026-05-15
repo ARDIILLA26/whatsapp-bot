@@ -2,16 +2,44 @@ const crypto = require("crypto");
 const url = require("url");
 const { sendWhatsAppMessage } = require("./whatsappService");
 const { handleIncomingText } = require("../flows/riskFlow");
+const { normalizeText } = require("../flows/risk/textUtils");
 const {
+  evaluateMessageAbuse,
   getSessionByUserId,
   hasProcessedMessageId,
   markProcessedMessageId,
 } = require("./storageService");
 
 const MAX_MESSAGE_AGE_MS = 5 * 60 * 1000;
+const MAX_PAYLOAD_BYTES = 256 * 1024;
+const MAX_TEXT_LENGTH = 1500;
+
+function maskIdentifier(value) {
+  const text = String(value || "");
+
+  if (text.length <= 4) {
+    return "***";
+  }
+
+  return `***${text.slice(-4)}`;
+}
+
+function sanitizeLogDetails(details = {}) {
+  return Object.fromEntries(Object.entries(details).map(([key, value]) => {
+    if (["from", "userId", "phoneNumber"].includes(key)) {
+      return [key, maskIdentifier(value)];
+    }
+
+    if (key === "text") {
+      return ["textLength", String(value || "").length];
+    }
+
+    return [key, value];
+  }));
+}
 
 function logIgnored(reason, details = {}) {
-  console.log("MESSAGE_IGNORED", JSON.stringify({ reason, ...details }));
+  console.log("MESSAGE_IGNORED", JSON.stringify({ reason, ...sanitizeLogDetails(details) }));
 }
 
 function extractValue(data) {
@@ -104,6 +132,16 @@ function validateIncomingTextMessage(value) {
     return { ignored: true, reason: "empty_text", messageId: message.id, from: message.from };
   }
 
+  if (text.length > MAX_TEXT_LENGTH) {
+    return {
+      ignored: true,
+      reason: "text_too_long",
+      messageId: message.id,
+      from: message.from,
+      textLength: text.length,
+    };
+  }
+
   const timestampSeconds = Number(message.timestamp);
 
   if (!Number.isFinite(timestampSeconds) || timestampSeconds <= 0) {
@@ -154,12 +192,20 @@ async function processWebhookBody(body) {
   }
 
   const { messageId, from, text, timestamp, profileName } = validation;
+  const normalizedText = normalizeText(text);
+  const abuseResult = evaluateMessageAbuse(from, normalizedText);
+
+  if (!abuseResult.allowed) {
+    markProcessedMessageId(messageId, { from, timestamp });
+    logIgnored(abuseResult.reason, { messageId, from });
+    return;
+  }
 
   console.log("MESSAGE_RECEIVED", JSON.stringify({
     messageId,
-    from,
+    from: maskIdentifier(from),
     timestamp,
-    text,
+    textLength: text.length,
   }));
 
   markProcessedMessageId(messageId, { from, timestamp });
@@ -184,7 +230,7 @@ async function processWebhookBody(body) {
   }
 
   await sendWhatsAppMessage(from, replies[0]);
-  console.log("REPLY_SENT", JSON.stringify({ messageId, from }));
+  console.log("REPLY_SENT", JSON.stringify({ messageId, from: maskIdentifier(from) }));
 }
 
 function createServerHandler() {
@@ -211,12 +257,33 @@ function createServerHandler() {
       // Mensajes entrantes
       if (req.method === "POST" && parsedUrl.pathname === "/webhook") {
         let body = "";
+        let payloadBytes = 0;
+        let payloadTooLarge = false;
 
         req.on("data", (chunk) => {
+          if (payloadTooLarge) {
+            return;
+          }
+
+          payloadBytes += chunk.length;
+
+          if (payloadBytes > MAX_PAYLOAD_BYTES) {
+            payloadTooLarge = true;
+            body = "";
+            console.warn("WEBHOOK_REJECTED", JSON.stringify({ reason: "payload_too_large" }));
+            res.writeHead(413);
+            res.end("Payload too large");
+            return;
+          }
+
           body += chunk.toString();
         });
 
         req.on("end", async () => {
+          if (payloadTooLarge) {
+            return;
+          }
+
           if (!validateMetaSignature(body, req.headers["x-hub-signature-256"])) {
             res.writeHead(403);
             return res.end("Invalid signature");

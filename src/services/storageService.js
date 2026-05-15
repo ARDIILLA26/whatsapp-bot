@@ -1,16 +1,31 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { generateLeadId } = require("../utils/helpers");
 const { sendLeadToGoogleSheets } = require("./googleSheetsService");
 const dataDir = path.join(__dirname, "..", "data");
+const runtimeDataDir = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : path.join(process.cwd(), "data");
 const sessionsFile = path.join(dataDir, "sessions.json");
 const leadsFile = path.join(dataDir, "leads.json");
 const processedMessagesFile = path.join(dataDir, "processedMessages.json");
+const abuseFile = path.join(runtimeDataDir, "abuse.json");
 const maxProcessedMessages = 1000;
+const ABUSE_SHORT_WINDOW_MS = 2 * 60 * 1000;
+const ABUSE_LONG_WINDOW_MS = 5 * 60 * 1000;
+const ABUSE_COOLDOWN_THRESHOLD = 12;
+const ABUSE_BLOCK_THRESHOLD = 20;
+const ABUSE_BLOCK_DURATION_MS = 15 * 60 * 1000;
+const REPEATED_TEXT_THRESHOLD = 3;
 
 function ensureDataFiles() {
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
+  }
+
+  if (!fs.existsSync(runtimeDataDir)) {
+    fs.mkdirSync(runtimeDataDir, { recursive: true });
   }
 
   if (!fs.existsSync(sessionsFile)) {
@@ -23,6 +38,10 @@ function ensureDataFiles() {
 
   if (!fs.existsSync(processedMessagesFile)) {
     fs.writeFileSync(processedMessagesFile, "[]", "utf8");
+  }
+
+  if (!fs.existsSync(abuseFile)) {
+    fs.writeFileSync(abuseFile, "[]", "utf8");
   }
 }
 
@@ -52,6 +71,53 @@ function getLeads() {
 
 function getProcessedMessages() {
   return readJsonArray(processedMessagesFile);
+}
+
+function getAbuseRecords() {
+  return readJsonArray(abuseFile);
+}
+
+function logAbuseStorageError(operation, error) {
+  console.error("ABUSE_STORAGE_ERROR", JSON.stringify({
+    operation,
+    message: error.message,
+  }));
+}
+
+function safeReadAbuseRecords() {
+  try {
+    return getAbuseRecords();
+  } catch (error) {
+    logAbuseStorageError("read", error);
+    return null;
+  }
+}
+
+function safeWriteAbuseRecords(records) {
+  try {
+    writeJsonArray(abuseFile, records);
+    return true;
+  } catch (error) {
+    logAbuseStorageError("write", error);
+    return false;
+  }
+}
+
+function getTextFingerprint(normalizedText) {
+  return crypto
+    .createHash("sha256")
+    .update(String(normalizedText || ""), "utf8")
+    .digest("hex");
+}
+
+function maskIdentifier(value) {
+  const text = String(value || "");
+
+  if (text.length <= 4) {
+    return "***";
+  }
+
+  return `***${text.slice(-4)}`;
 }
 
 function getSessionByUserId(userId) {
@@ -88,6 +154,110 @@ function markProcessedMessageId(messageId, metadata = {}) {
 
   const trimmedMessages = processedMessages.slice(-maxProcessedMessages);
   writeJsonArray(processedMessagesFile, trimmedMessages);
+}
+
+function pruneAbuseRecords(records, now) {
+  return records
+    .map((record) => {
+      const blockedUntilMs = record.blockedUntil ? new Date(record.blockedUntil).getTime() : 0;
+      const events = Array.isArray(record.events)
+        ? record.events.filter((event) => now - Number(event.at || 0) <= ABUSE_LONG_WINDOW_MS)
+        : [];
+
+      return {
+        ...record,
+        events,
+        blockedUntil: blockedUntilMs > now ? record.blockedUntil : "",
+      };
+    })
+    .filter((record) => record.events.length > 0 || record.blockedUntil);
+}
+
+function evaluateMessageAbuse(userId, normalizedText, now = Date.now()) {
+  const storedAbuseRecords = safeReadAbuseRecords();
+
+  if (!storedAbuseRecords) {
+    return {
+      allowed: true,
+      reason: "abuse_storage_unavailable",
+    };
+  }
+
+  const abuseRecords = pruneAbuseRecords(storedAbuseRecords, now);
+  const index = abuseRecords.findIndex((item) => item.userId === userId);
+  const currentRecord = index >= 0 ? abuseRecords[index] : { userId, events: [] };
+  const blockedUntil = currentRecord.blockedUntil ? new Date(currentRecord.blockedUntil).getTime() : 0;
+
+  if (blockedUntil > now) {
+    safeWriteAbuseRecords(abuseRecords.slice(-1000));
+
+    return {
+      allowed: false,
+      reason: "temporary_block",
+      blockedUntil: currentRecord.blockedUntil,
+    };
+  }
+
+  const recentEvents = Array.isArray(currentRecord.events)
+    ? currentRecord.events.filter((event) => now - Number(event.at || 0) <= ABUSE_LONG_WINDOW_MS)
+    : [];
+
+  recentEvents.push({
+    at: now,
+    textFingerprint: getTextFingerprint(normalizedText),
+  });
+
+  const shortWindowCount = recentEvents.filter((event) => now - Number(event.at || 0) <= ABUSE_SHORT_WINDOW_MS).length;
+  const longWindowCount = recentEvents.length;
+  const textFingerprint = getTextFingerprint(normalizedText);
+  const repeatedTextCount = recentEvents.filter((event) =>
+    event.textFingerprint === textFingerprint && now - Number(event.at || 0) <= ABUSE_SHORT_WINDOW_MS
+  ).length;
+
+  const nextRecord = {
+    userId,
+    events: recentEvents,
+    blockedUntil: "",
+    updatedAt: new Date(now).toISOString(),
+  };
+
+  let result = { allowed: true, reason: "allowed" };
+
+  if (longWindowCount > ABUSE_BLOCK_THRESHOLD) {
+    nextRecord.blockedUntil = new Date(now + ABUSE_BLOCK_DURATION_MS).toISOString();
+    result = {
+      allowed: false,
+      reason: "temporary_block",
+      blockedUntil: nextRecord.blockedUntil,
+    };
+  } else if (shortWindowCount > ABUSE_COOLDOWN_THRESHOLD) {
+    result = {
+      allowed: false,
+      reason: "cooldown",
+    };
+  } else if (repeatedTextCount > REPEATED_TEXT_THRESHOLD) {
+    result = {
+      allowed: false,
+      reason: "repeated_message",
+    };
+  }
+
+  if (index >= 0) {
+    abuseRecords[index] = nextRecord;
+  } else {
+    abuseRecords.push(nextRecord);
+  }
+
+  safeWriteAbuseRecords(abuseRecords.slice(-1000));
+
+  if (!result.allowed) {
+    console.warn("MESSAGE_RATE_LIMITED", JSON.stringify({
+      userId: maskIdentifier(userId),
+      reason: result.reason,
+    }));
+  }
+
+  return result;
 }
 
 function scoreLead(session) {
@@ -171,14 +341,14 @@ function createLeadFromSession(session) {
 
     if (index >= 0) {
       leads[index] = lead;
-      console.log("LEAD_UPDATED", JSON.stringify({ userId: lead.userId, phoneNumber: lead.phoneNumber }));
+      console.log("LEAD_UPDATED", JSON.stringify({ userId: maskIdentifier(lead.userId), phoneNumber: maskIdentifier(lead.phoneNumber) }));
     } else {
       leads.push(lead);
-      console.log("LEAD_CREATED", JSON.stringify({ userId: lead.userId, phoneNumber: lead.phoneNumber }));
+      console.log("LEAD_CREATED", JSON.stringify({ userId: maskIdentifier(lead.userId), phoneNumber: maskIdentifier(lead.phoneNumber) }));
     }
 
     console.log("LEAD_SCORED", JSON.stringify({
-      userId: lead.userId,
+      userId: maskIdentifier(lead.userId),
       lastIntent: lead.lastIntent,
       score: lead.score,
       priority: lead.priority,
@@ -186,13 +356,13 @@ function createLeadFromSession(session) {
     }));
 
     writeJsonArray(leadsFile, leads);
-console.log("GOOGLE_SHEETS_CALLING", JSON.stringify({ userId: lead.userId, lastIntent: lead.lastIntent }));
+console.log("GOOGLE_SHEETS_CALLING", JSON.stringify({ userId: maskIdentifier(lead.userId), lastIntent: lead.lastIntent }));
 sendLeadToGoogleSheets(lead);
 return lead;
   } catch (error) {
     console.error("LEAD_SAVE_ERROR", JSON.stringify({
-      userId: session?.userId || "",
-      phoneNumber: session?.phoneNumber || "",
+      userId: maskIdentifier(session?.userId || ""),
+      phoneNumber: maskIdentifier(session?.phoneNumber || ""),
       message: error.message,
     }));
     return null;
@@ -219,5 +389,6 @@ module.exports = {
   upsertSession,
   hasProcessedMessageId,
   markProcessedMessageId,
+  evaluateMessageAbuse,
   createLeadFromSession,
 };
