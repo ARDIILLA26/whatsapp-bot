@@ -19,6 +19,9 @@ WHATSAPP_API_VERSION=v21.0
 APP_BASE_URL=<your_private_url>
 ```
 
+`DATA_DIR` es configuracion operativa para archivos runtime, no es un secreto.
+No colocar tokens ni credenciales ahi, y no subir archivos runtime al repositorio.
+
 ## 3. Webhook
 
 URL a registrar:

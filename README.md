@@ -89,6 +89,19 @@ Variables disponibles:
 - `LIGHT_MULTIPLIER`: ajuste para construccion ligera
 - `PLUS_SQUARE_METERS_FALLBACK`: valor usado cuando el usuario responde `+`
 
+## Runtime data / DATA_DIR
+
+`DATA_DIR` define donde se guardan archivos runtime como `abuse.json`.
+
+Si `DATA_DIR` no se configura, el sistema usa `./data`.
+La carpeta `./data` esta ignorada por Git y no debe versionarse.
+
+En Render, para mayor persistencia, `DATA_DIR` debe apuntar a una ruta montada en disco persistente.
+Si no hay disco persistente, el anti-abuso puede reiniciarse al redeploy.
+Esto no rompe el bot, pero reduce memoria historica del rate limit.
+
+Para multiples instancias, `DATA_DIR` local no es suficiente; se requerira Redis o storage centralizado en un paquete futuro.
+
 ## Modificacion de costos
 
 Se puede modificar por variables de entorno o por archivo de configuracion:
