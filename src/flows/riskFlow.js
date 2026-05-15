@@ -2,7 +2,7 @@ const { upsertSession, createLeadFromSession } = require("../services/storageSer
 const { RESPONSES, CONTINUATION_BY_INTENT } = require("./risk/responses");
 const { KEYWORDS } = require("./risk/keywords");
 const { INTENT_PRIORITY } = require("./risk/priorities");
-const { extractAppointmentData, buildAppointmentDataResponse, shouldExitAppointmentData, shouldAlwaysExitAppointmentData } = require("./risk/appointment");
+const { extractAppointmentData, buildAppointmentDataResponse, shouldExitAppointmentData, shouldAlwaysExitAppointmentData, looksLikeAppointmentData } = require("./risk/appointment");
 const { normalizeText, includesAny } = require("./risk/textUtils");
 
 const MEMORY_WINDOW_MS = 5 * 60 * 1000;
@@ -58,6 +58,15 @@ function resolveResponse(intent, normalizedText, session) {
   return RESPONSES[intent] || RESPONSES.DESCONOCIDO;
 }
 
+function isSafeAppointmentNameOnly(normalizedText, appointmentData) {
+  if (!appointmentData.likelyName || appointmentData.schedule) {
+    return false;
+  }
+
+  return /^(me llamo|mi nombre es|habla con|soy)\s+[a-z]+(?:\s+[a-z]+){0,2}$/.test(normalizedText) ||
+    /^[a-z]+(?:\s+[a-z]+){0,2}$/.test(normalizedText);
+}
+
 function updateSessionMemory(session, incomingText, normalizedText, intent, response, awaiting = null) {
   const now = new Date().toISOString();
 
@@ -87,15 +96,32 @@ async function handleIncomingText(user, incomingText, session) {
   if (activeSession.awaiting === "APPOINTMENT_DATA") {
     const overridingIntent = classifyMessage(incomingText);
     const appointmentData = extractAppointmentData(incomingText);
+    const effectiveIntent = overridingIntent === "PIRATEO_SISTEMA" && isSafeAppointmentNameOnly(normalizedText, appointmentData)
+      ? "APPOINTMENT_DATA"
+      : overridingIntent;
     const hasCompleteIncomingAppointmentData = Boolean(appointmentData.likelyName && appointmentData.schedule);
 
-    if (shouldExitAppointmentData(overridingIntent) && (shouldAlwaysExitAppointmentData(overridingIntent) || !hasCompleteIncomingAppointmentData)) {
-      const response = resolveResponse(overridingIntent, normalizedText, { ...activeSession, awaiting: null });
+    if (effectiveIntent === "DESCONOCIDO" && !looksLikeAppointmentData(appointmentData)) {
+      const response = resolveResponse(effectiveIntent, normalizedText, { ...activeSession, awaiting: null });
 
       activeSession.awaiting = null;
-      activeSession.riskCategory = overridingIntent;
+      activeSession.riskCategory = effectiveIntent;
 
-      updateSessionMemory(activeSession, incomingText, normalizedText, overridingIntent, response, null);
+      updateSessionMemory(activeSession, incomingText, normalizedText, effectiveIntent, response, null);
+
+      return {
+        replies: [response],
+        session: activeSession,
+      };
+    }
+
+    if (shouldExitAppointmentData(effectiveIntent) && (shouldAlwaysExitAppointmentData(effectiveIntent) || !hasCompleteIncomingAppointmentData)) {
+      const response = resolveResponse(effectiveIntent, normalizedText, { ...activeSession, awaiting: null });
+
+      activeSession.awaiting = null;
+      activeSession.riskCategory = effectiveIntent;
+
+      updateSessionMemory(activeSession, incomingText, normalizedText, effectiveIntent, response, null);
 
       return {
         replies: [response],
@@ -122,12 +148,15 @@ async function handleIncomingText(user, incomingText, session) {
     };
   }
 
-  const intent = classifyMessage(incomingText);
+  const rawIntent = classifyMessage(incomingText);
   const appointmentData = extractAppointmentData(incomingText);
-  const looksLikeAppointmentData = Boolean(appointmentData.likelyName || appointmentData.schedule);
+  const intent = rawIntent === "PIRATEO_SISTEMA" && isSafeAppointmentNameOnly(normalizedText, appointmentData)
+    ? "APPOINTMENT_DATA"
+    : rawIntent;
+  const hasAppointmentData = looksLikeAppointmentData(appointmentData);
   const hasCompleteIncomingAppointmentData = Boolean(appointmentData.likelyName && appointmentData.schedule);
 
-  if (looksLikeAppointmentData && (!shouldExitAppointmentData(intent) || (hasCompleteIncomingAppointmentData && !shouldAlwaysExitAppointmentData(intent)))) {
+  if (hasAppointmentData && (!shouldExitAppointmentData(intent) || (hasCompleteIncomingAppointmentData && !shouldAlwaysExitAppointmentData(intent)))) {
     const response = buildAppointmentDataResponse(incomingText, activeSession);
     const needsMoreAppointmentData = !appointmentData.likelyName || !appointmentData.schedule || response === RESPONSES.APPOINTMENT_FLEXIBLE || response === RESPONSES.APPOINTMENT_NEED_DAY;
 
