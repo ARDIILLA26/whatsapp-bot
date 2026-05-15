@@ -1,5 +1,4 @@
 const crypto = require("crypto");
-const url = require("url");
 const { sendWhatsAppMessage } = require("./whatsappService");
 const { handleIncomingText } = require("../flows/riskFlow");
 const { normalizeText } = require("../flows/risk/textUtils");
@@ -236,13 +235,13 @@ async function processWebhookBody(body) {
 function createServerHandler() {
   return (req, res) => {
     try {
-      const parsedUrl = url.parse(req.url, true);
+      const requestUrl = new URL(req.url || "/", "http://localhost");
 
       // Verificacion webhook Meta
-      if (req.method === "GET" && parsedUrl.pathname === "/webhook") {
-        const mode = parsedUrl.query["hub.mode"];
-        const token = parsedUrl.query["hub.verify_token"];
-        const challenge = parsedUrl.query["hub.challenge"];
+      if (req.method === "GET" && requestUrl.pathname === "/webhook") {
+        const mode = requestUrl.searchParams.get("hub.mode");
+        const token = requestUrl.searchParams.get("hub.verify_token");
+        const challenge = requestUrl.searchParams.get("hub.challenge") || "";
 
         if (mode === "subscribe" && token === process.env.VERIFY_TOKEN) {
           console.log("Webhook verificado correctamente");
@@ -255,7 +254,7 @@ function createServerHandler() {
       }
 
       // Mensajes entrantes
-      if (req.method === "POST" && parsedUrl.pathname === "/webhook") {
+      if (req.method === "POST" && requestUrl.pathname === "/webhook") {
         let body = "";
         let payloadBytes = 0;
         let payloadTooLarge = false;
@@ -303,7 +302,7 @@ function createServerHandler() {
       }
 
       // Ruta base
-      if (parsedUrl.pathname === "/") {
+      if (requestUrl.pathname === "/") {
         res.writeHead(200);
         return res.end("Servidor funcionando");
       }
