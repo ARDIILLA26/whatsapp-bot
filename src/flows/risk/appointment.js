@@ -37,6 +37,7 @@ const NAME_BLOCK_WORDS = new Set([
   "quiero",
   "rato",
   "responsabilidad",
+  "salud",
   "scoring",
   "seguro",
   "solo",
@@ -85,14 +86,34 @@ function parseNameCandidate(candidate) {
   return formatName(words);
 }
 
+function parseNameBeforeSchedule(candidate) {
+  const words = String(candidate || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  const scheduleIndex = words.findIndex((word) => {
+    const cleanWord = word.replace(/[,\.\s]/g, "");
+    const normalizedWord = normalizeText(cleanWord);
+
+    return DAY_WORDS.has(normalizedWord) || /^([01]?\d|2[0-3])(?::([0-5]\d))?$/.test(cleanWord);
+  });
+
+  if (scheduleIndex <= 0) {
+    return "";
+  }
+
+  return parseNameCandidate(words.slice(0, scheduleIndex).join(" "));
+}
+
 function extractStatedName(rawText, normalizedText) {
   if (normalizedText.includes("soy de ")) {
     return "";
   }
 
-  const statedNameMatch = rawText.match(/\b(?:me llamo|mi nombre es|habla con|soy(?:\s+(?:el|la))?)\s+([A-Za-z\u00c1\u00c9\u00cd\u00d3\u00da\u00dc\u00d1\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]+(?:\s+[A-Za-z\u00c1\u00c9\u00cd\u00d3\u00da\u00dc\u00d1\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]+){0,2})\b/i);
+  const statedNameMatch = rawText.match(/\b(?:me llamo|mi nombre es|habla con|soy(?:\s+(?:el|la))?)\s+(.+)$/i);
+  const candidate = statedNameMatch ? statedNameMatch[1] : "";
 
-  return parseNameCandidate(statedNameMatch ? statedNameMatch[1] : "");
+  return parseNameBeforeSchedule(candidate) || parseNameCandidate(candidate);
 }
 
 function extractStandaloneName(rawText, normalizedText) {
@@ -104,6 +125,11 @@ function extractStandaloneName(rawText, normalizedText) {
     .split(/\s+/)
     .filter(Boolean)
     .map((word) => normalizeText(word.replace(/[,\.\s]/g, "")));
+  const compactName = parseNameBeforeSchedule(rawText);
+
+  if (compactName) {
+    return compactName;
+  }
 
   if (normalizedWords.some((word) => NAME_BLOCK_CONNECTORS.has(word))) {
     return "";
@@ -159,6 +185,26 @@ function formatSchedule(day, hour, period) {
   return "";
 }
 
+function formatStoredSchedule(session = {}) {
+  const day = session.appointmentDay || "";
+  const time = session.appointmentTime || "";
+  const normalizedTime = normalizeText(time);
+
+  if (day && ["manana", "tarde", "noche"].includes(normalizedTime)) {
+    return `${day} en la ${time}`;
+  }
+
+  if (day && time) {
+    return `${day} a las ${time}`;
+  }
+
+  if (time) {
+    return ["manana", "tarde", "noche"].includes(normalizedTime) ? time : `a las ${time}`;
+  }
+
+  return day || time;
+}
+
 function resolveAppointmentTopic(normalizedText) {
   if (includesAny(normalizedText, KEYWORDS.FLOTILLA)) {
     return "flotilla";
@@ -182,8 +228,35 @@ function resolveAppointmentTopic(normalizedText) {
   return "";
 }
 
+function buildAppointmentTopicCompletionResponse(text, session = {}) {
+  const { topic } = extractAppointmentData(text);
+  const finalName = session.appointmentName || "";
+  const schedule = formatStoredSchedule(session);
+
+  if (!topic || !finalName || !schedule) {
+    return "";
+  }
+
+  return RESPONSES.APPOINTMENT_READY_COMPLETE
+    .replace("{name}", finalName)
+    .replace("{schedule}", schedule)
+    .replace("{topic}", topic);
+}
+
 function buildAppointmentDataResponse(text, session = {}) {
   const normalizedText = normalizeText(text);
+  const { likelyName, day, hour, schedule, topic } = extractAppointmentData(text);
+  const finalName = likelyName || session.appointmentName || "";
+  const finalDay = day || session.appointmentDay || "";
+  const finalHour = hour || session.appointmentTime || "";
+  const finalSchedule = formatStoredSchedule({
+    appointmentDay: finalDay,
+    appointmentTime: finalHour,
+  }) || schedule;
+  const knownTopic = topic || (
+    session.riskCategory &&
+    !["CITA", "APPOINTMENT_DATA", "DESCONOCIDO", "SALUDO"].includes(session.riskCategory)
+  );
 
   if (includesAny(normalizedText, KEYWORDS.APPOINTMENT_DURATION)) {
     return RESPONSES.APPOINTMENT_DURATION;
@@ -205,32 +278,45 @@ function buildAppointmentDataResponse(text, session = {}) {
     return RESPONSES.APPOINTMENT_LINK;
   }
 
+  if (finalName && finalHour && !finalDay) {
+    return RESPONSES.APPOINTMENT_NEED_DAY;
+  }
+
+  if (finalName && finalSchedule) {
+    if (knownTopic) {
+      return RESPONSES.APPOINTMENT_READY_WITH_TOPIC
+        .replace("{name}", finalName)
+        .replace("{schedule}", finalSchedule);
+    }
+
+    return RESPONSES.APPOINTMENT_READY_NEED_TOPIC
+      .replace("{name}", finalName)
+      .replace("{schedule}", finalSchedule);
+  }
+
+  if (!finalName && finalSchedule) {
+    return RESPONSES.APPOINTMENT_NEED_NAME.replace("{schedule}", finalSchedule);
+  }
+
   if (includesAny(normalizedText, KEYWORDS.APPOINTMENT_FLEXIBLE)) {
     return RESPONSES.APPOINTMENT_FLEXIBLE;
   }
-
-  const { likelyName, day, hour, schedule, topic } = extractAppointmentData(text);
-  const finalName = likelyName || session.appointmentName || "";
 
   if (hour && !day) {
     return RESPONSES.APPOINTMENT_NEED_DAY;
   }
 
-  if (!finalName && !schedule) {
+  if (!finalName && !finalSchedule) {
     return RESPONSES.APPOINTMENT_DATA;
   }
 
-  if (finalName && !schedule) {
+  if (finalName && !finalSchedule) {
     return RESPONSES.APPOINTMENT_NEED_TIME.replace("{name}", finalName);
   }
 
-  if (!finalName && schedule) {
-    return RESPONSES.APPOINTMENT_NEED_NAME.replace("{schedule}", schedule);
-  }
-
   const preference = topic
-    ? `Registro tu preferencia para ${schedule}, sobre ${topic}.`
-    : `Registro tu preferencia para ${schedule}.`;
+    ? `Registro tu preferencia para ${finalSchedule}, sobre ${topic}.`
+    : `Registro tu preferencia para ${finalSchedule}.`;
 
   return `Bien, ${finalName}.\n${preference}\nTe contactaremos para confirmar la revisi\u00f3n.`;
 }
@@ -280,6 +366,7 @@ function looksLikeAppointmentData(appointmentData = {}) {
 module.exports = {
   extractAppointmentData,
   buildAppointmentDataResponse,
+  buildAppointmentTopicCompletionResponse,
   shouldExitAppointmentData,
   shouldAlwaysExitAppointmentData,
   looksLikeAppointmentData,

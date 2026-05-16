@@ -2,7 +2,7 @@ const { upsertSession, createLeadFromSession } = require("../services/storageSer
 const { RESPONSES, CONTINUATION_BY_INTENT } = require("./risk/responses");
 const { KEYWORDS } = require("./risk/keywords");
 const { INTENT_PRIORITY } = require("./risk/priorities");
-const { extractAppointmentData, buildAppointmentDataResponse, shouldExitAppointmentData, shouldAlwaysExitAppointmentData, looksLikeAppointmentData } = require("./risk/appointment");
+const { extractAppointmentData, buildAppointmentDataResponse, buildAppointmentTopicCompletionResponse, shouldExitAppointmentData, shouldAlwaysExitAppointmentData, looksLikeAppointmentData } = require("./risk/appointment");
 const { normalizeText, includesAny } = require("./risk/textUtils");
 
 const MEMORY_WINDOW_MS = 5 * 60 * 1000;
@@ -42,10 +42,41 @@ function isRecentExactRepeat(session, normalizedText, now) {
   );
 }
 
+function isHealthAcceptanceQuestion(normalizedText) {
+  return [
+    "me van a aceptar",
+    "me van aceptar",
+    "me pueden rechazar",
+    "me rechazan",
+    "me aceptan",
+    "aceptan con enfermedad",
+    "preexistencia",
+    "padecimiento previo",
+    "padecimientos previos",
+    "me cubren preexistencias",
+  ].some((phrase) => normalizedText.includes(phrase));
+}
+
+function isAwaitingAppointmentTopic(session) {
+  return Boolean(
+    session?.appointmentName &&
+    (session?.appointmentDay || session?.appointmentTime) &&
+    isAppointmentReadyNeedTopicResponse(session?.lastResponse)
+  );
+}
+
+function isAppointmentReadyNeedTopicResponse(response) {
+  return String(response || "").includes("Antes de confirmarlo");
+}
+
 function resolveResponse(intent, normalizedText, session) {
   const now = Date.now();
   const previousIntent = session?.lastIntent;
   const repeatedText = isRecentExactRepeat(session, normalizedText, now);
+
+  if (intent === "SALUD" && isHealthAcceptanceQuestion(normalizedText)) {
+    return RESPONSES.SALUD_ACEPTACION;
+  }
 
   if (repeatedText && previousIntent) {
     return CONTINUATION_BY_INTENT[previousIntent] || RESPONSES.DESCONOCIDO;
@@ -59,12 +90,24 @@ function resolveResponse(intent, normalizedText, session) {
 }
 
 function isSafeAppointmentNameOnly(normalizedText, appointmentData) {
-  if (!appointmentData.likelyName || appointmentData.schedule) {
+  if (!appointmentData.likelyName) {
     return false;
   }
 
-  return /^(me llamo|mi nombre es|habla con|soy)\s+[a-z]+(?:\s+[a-z]+){0,2}$/.test(normalizedText) ||
+  return /^(me llamo|mi nombre es|habla con|soy)\s+[a-z]+(?:\s+[a-z]+){0,2}(?:\s+(hoy|manana|pasado manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo)(?:\s+([01]?\d|2[0-3])(?::([0-5]\d))?)?)?$/.test(normalizedText) ||
     /^[a-z]+(?:\s+[a-z]+){0,2}$/.test(normalizedText);
+}
+
+function isSafeAppointmentDataInFlow(normalizedText, appointmentData) {
+  if (isSafeAppointmentNameOnly(normalizedText, appointmentData)) {
+    return true;
+  }
+
+  if (!appointmentData.likelyName || !appointmentData.hour) {
+    return false;
+  }
+
+  return /^(me llamo|mi nombre es|habla con|soy)\s+[a-z]+(?:\s+[a-z]+){0,2}\s+([01]?\d|2[0-3])(?::([0-5]\d))?$/.test(normalizedText);
 }
 
 function updateSessionMemory(session, incomingText, normalizedText, intent, response, awaiting = null) {
@@ -96,10 +139,26 @@ async function handleIncomingText(user, incomingText, session) {
   if (activeSession.awaiting === "APPOINTMENT_DATA") {
     const overridingIntent = classifyMessage(incomingText);
     const appointmentData = extractAppointmentData(incomingText);
-    const effectiveIntent = overridingIntent === "PIRATEO_SISTEMA" && isSafeAppointmentNameOnly(normalizedText, appointmentData)
+    const effectiveIntent = overridingIntent === "PIRATEO_SISTEMA" && isSafeAppointmentDataInFlow(normalizedText, appointmentData)
       ? "APPOINTMENT_DATA"
       : overridingIntent;
     const hasCompleteIncomingAppointmentData = Boolean(appointmentData.likelyName && appointmentData.schedule);
+
+    if (isAwaitingAppointmentTopic(activeSession) && !shouldAlwaysExitAppointmentData(effectiveIntent)) {
+      const appointmentTopicResponse = buildAppointmentTopicCompletionResponse(incomingText, activeSession);
+
+      if (appointmentTopicResponse) {
+        activeSession.awaiting = null;
+        activeSession.riskCategory = "CITA";
+
+        updateSessionMemory(activeSession, incomingText, normalizedText, "APPOINTMENT_DATA", appointmentTopicResponse, null);
+
+        return {
+          replies: [appointmentTopicResponse],
+          session: activeSession,
+        };
+      }
+    }
 
     if (effectiveIntent === "DESCONOCIDO" && !looksLikeAppointmentData(appointmentData)) {
       const response = resolveResponse(effectiveIntent, normalizedText, { ...activeSession, awaiting: null });
@@ -132,7 +191,7 @@ async function handleIncomingText(user, incomingText, session) {
     const response = buildAppointmentDataResponse(incomingText, activeSession);
     const hasName = Boolean(appointmentData.likelyName || activeSession.appointmentName);
     const hasSchedule = Boolean(appointmentData.schedule || activeSession.appointmentDay || activeSession.appointmentTime);
-    const needsMoreAppointmentData = !hasName || !hasSchedule || response === RESPONSES.APPOINTMENT_FLEXIBLE || response === RESPONSES.APPOINTMENT_NEED_DAY;
+    const needsMoreAppointmentData = !hasName || !hasSchedule || response === RESPONSES.APPOINTMENT_FLEXIBLE || response === RESPONSES.APPOINTMENT_NEED_DAY || isAppointmentReadyNeedTopicResponse(response);
 
     activeSession.appointmentRequested = true;
     activeSession.appointmentName = appointmentData.likelyName || activeSession.appointmentName || "";
@@ -158,7 +217,7 @@ async function handleIncomingText(user, incomingText, session) {
 
   if (hasAppointmentData && (!shouldExitAppointmentData(intent) || (hasCompleteIncomingAppointmentData && !shouldAlwaysExitAppointmentData(intent)))) {
     const response = buildAppointmentDataResponse(incomingText, activeSession);
-    const needsMoreAppointmentData = !appointmentData.likelyName || !appointmentData.schedule || response === RESPONSES.APPOINTMENT_FLEXIBLE || response === RESPONSES.APPOINTMENT_NEED_DAY;
+    const needsMoreAppointmentData = !appointmentData.likelyName || !appointmentData.schedule || response === RESPONSES.APPOINTMENT_FLEXIBLE || response === RESPONSES.APPOINTMENT_NEED_DAY || isAppointmentReadyNeedTopicResponse(response);
 
     activeSession.appointmentRequested = true;
     activeSession.appointmentName = appointmentData.likelyName || activeSession.appointmentName || "";
