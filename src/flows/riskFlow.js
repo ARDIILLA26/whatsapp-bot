@@ -50,11 +50,47 @@ function isHealthAcceptanceQuestion(normalizedText) {
     "me rechazan",
     "me aceptan",
     "aceptan con enfermedad",
+    "me cubren preexistencias",
+  ].some((phrase) => normalizedText.includes(phrase));
+}
+
+function isHealthPriorCondition(normalizedText) {
+  return [
     "preexistencia",
     "padecimiento previo",
     "padecimientos previos",
-    "me cubren preexistencias",
+    "diabetes",
+    "hipertension",
+    "presion alta",
+    "tiroides",
+    "hipotiroidismo",
+    "enfermedad previa",
+    "enfermedad preexistente",
   ].some((phrase) => normalizedText.includes(phrase));
+}
+
+function isHealthPolicyReview(normalizedText) {
+  return [
+    "ya tengo poliza",
+    "tengo poliza",
+    "poliza vigente",
+    "ya tengo seguro",
+    "renovacion",
+    "renovar",
+    "exclusion",
+    "excluir",
+    "reclamacion",
+    "ajuste",
+  ].some((phrase) => normalizedText.includes(phrase));
+}
+
+function isGenericHealthInsuranceFollowup(normalizedText) {
+  return [
+    "gastos medicos",
+    "seguro medico",
+    "seguro de gastos medicos",
+    "seguro de salud",
+  ].some((phrase) => normalizedText === phrase || normalizedText.includes(phrase));
 }
 
 function isAwaitingAppointmentTopic(session) {
@@ -72,10 +108,23 @@ function isAppointmentReadyNeedTopicResponse(response) {
 function resolveResponse(intent, normalizedText, session) {
   const now = Date.now();
   const previousIntent = session?.lastIntent;
+  const hasHealthContext = previousIntent === "SALUD";
   const repeatedText = isRecentExactRepeat(session, normalizedText, now);
+
+  if ((intent === "SALUD" || intent === "INFORMACION" || hasHealthContext) && isHealthPolicyReview(normalizedText)) {
+    return RESPONSES.SALUD_POLIZA_VIGENTE;
+  }
 
   if (intent === "SALUD" && isHealthAcceptanceQuestion(normalizedText)) {
     return RESPONSES.SALUD_ACEPTACION;
+  }
+
+  if (intent === "SALUD" && isHealthPriorCondition(normalizedText)) {
+    return RESPONSES.SALUD_CONTINUACION;
+  }
+
+  if (hasHealthContext && intent === "DESCONOCIDO" && isGenericHealthInsuranceFollowup(normalizedText)) {
+    return RESPONSES.SALUD_CONTINUACION;
   }
 
   if (repeatedText && previousIntent) {
