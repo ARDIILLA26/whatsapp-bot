@@ -99,6 +99,10 @@ function isSafeAppointmentNameOnly(normalizedText, appointmentData) {
 }
 
 function isSafeAppointmentDataInFlow(normalizedText, appointmentData) {
+  if (includesAny(normalizedText, KEYWORDS.PIRATEO_SISTEMA)) {
+    return false;
+  }
+
   if (isSafeAppointmentNameOnly(normalizedText, appointmentData)) {
     return true;
   }
@@ -209,7 +213,7 @@ async function handleIncomingText(user, incomingText, session) {
 
   const rawIntent = classifyMessage(incomingText);
   const appointmentData = extractAppointmentData(incomingText);
-  const intent = rawIntent === "PIRATEO_SISTEMA" && isSafeAppointmentNameOnly(normalizedText, appointmentData)
+  const intent = rawIntent === "PIRATEO_SISTEMA" && isSafeAppointmentDataInFlow(normalizedText, appointmentData)
     ? "APPOINTMENT_DATA"
     : rawIntent;
   const hasAppointmentData = looksLikeAppointmentData(appointmentData);
