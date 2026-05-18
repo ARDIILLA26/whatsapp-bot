@@ -1,7 +1,7 @@
 const RESPONSES = {
   SALUDO: "Hola. Soy el asistente de Cáceres & Casio.\nAntes de hablar de una póliza, ubiquemos qué necesitas decidir.\n¿Qué situación quieres revisar?",
-  PRECIO: "Sí, podemos llegar a un número.\nPero primero necesito entender qué estás intentando resolver.\n¿Es para una persona, una empresa, un auto, salud, vida o patrimonio?",
-  PRECIO_CONTINUACION: "Comparar precio ayuda solo si estamos viendo lo mismo.\n\n¿Qué estás comparando: costo, cobertura, requisito o exclusiones?",
+  PRECIO: "Sí, puedo orientarte con un rango, pero cambia mucho según el caso.\nPara no darte un número falso: ¿es auto, salud, vida, empresa, flotilla o patrimonio?",
+  PRECIO_CONTINUACION: "Para comparar bien, necesito saber qué estás comparando: costo, cobertura, deducible, exclusiones o alcance real.\n¿Qué número o propuesta tienes enfrente?",
   PATRIMONIO_PROPIEDAD: "Con inmuebles, no basta con ver el valor del bien.\n\n¿Son propios, rentados o comerciales?",
   PATRIMONIO_PROPIEDAD_CONTINUACION: "Para ordenarlo, dime qué pesa más ahora.\n\n¿Daño al inmueble, inquilinos, responsabilidad o continuidad de renta?",
   PATRIMONIO_AUTO: "En auto, la cobertura depende mucho del uso.\n\n¿Qué uso tiene el vehículo: personal, familiar, trabajo o plataforma?",
@@ -9,7 +9,7 @@ const RESPONSES = {
   FLOTILLA: "En flotilla, no basta con contar unidades.\n\n¿Qué mueven y en qué tipo de rutas operan?",
   FLOTILLA_CONTINUACION: "Para ordenar la operación, empecemos por rutas.\n\n¿Son locales, foráneas o mixtas?",
   PATRIMONIO_GENERAL: "Blindar patrimonio no siempre significa comprar más seguros.\n\n¿Qué te preocupa más: demanda, inmuebles, deuda u operación?",
-  EMPRESA: "Eso normalmente viene de un contrato o requisito.\n\n¿Te lo pide un cliente, una obra, una plaza o una licitación?",
+  EMPRESA: "En empresa conviene ubicar qué riesgo pesa más: contrato, responsabilidad civil, operación, empleados, inventario o continuidad.\n¿Qué te preocupa primero?",
   EMPRESA_CONTINUACION: "Entonces hay que ubicar qué responsabilidad te están trasladando.\n¿Te piden cubrir daños, operación, terceros o cumplimiento?",
   SALUD: "Puede revisarse.\nPara cuidar tu privacidad, no necesito datos médicos detallados por aquí.\n¿Buscas contratar por primera vez o revisar una póliza vigente?",
   SALUD_CONTINUACION: "Ese dato puede influir en el análisis.\nNo conviene detallarlo por WhatsApp.\n¿La duda es por contratación nueva, renovación o una póliza vigente?",
@@ -19,7 +19,7 @@ const RESPONSES = {
   VIDA_CONTINUACION: "Separémoslo por consecuencia.\n\n¿Te preocupa ingreso, deuda, dependientes o continuidad del negocio?",
   FAMILIA: "Familia puede apuntar a ingreso, salud o patrimonio.\n\n¿Qué te preocupa más: faltar, enfermar, una deuda o una vivienda?",
   FAMILIA_CONTINUACION: "Para no responder en abstracto, ubiquemos la consecuencia principal.\n\n¿Dependen de tu ingreso o la preocupación va por salud o patrimonio?",
-  INFORMACION: "Para orientarte bien, primero necesito ubicar la decisión.\n¿Tiene que ver con tu negocio, patrimonio, salud, auto o ingreso?",
+  INFORMACION: "Te oriento.\nPrimero ubiquemos la decisión: ¿quieres contratar, revisar una póliza vigente, comparar una cotización o resolver un siniestro?",
   CITA: "Podemos revisarlo en una conversación.\nAntes de agendar, necesito ubicar el tema.\n¿La llamada sería por empresa, salud, vida, auto, patrimonio o contrato?",
   APPOINTMENT_DATA: "Para dejarlo encaminado, necesito dos datos:\ntu nombre y un horario posible.\nPor ejemplo: Franklin, mañana 11:00.",
   APPOINTMENT_NEED_TIME: "Gracias, {name}.\nMe falta el horario para dejarlo claro.\n¿Te funciona mañana en la mañana, en la tarde o propones una hora?",
@@ -31,9 +31,9 @@ const RESPONSES = {
   APPOINTMENT_READY_COMPLETE: "Perfecto, {name}.\nDejo como opción {schedule}.\nTema: {topic}.\nTe contactaremos para confirmar el horario.",
   APPOINTMENT_FLEXIBLE: "Podemos manejarlo sencillo.\nPropón una opción: mañana en la mañana, mañana en la tarde o pasado mañana.",
   APPOINTMENT_DURATION: "La primera conversación suele durar cerca de 20 minutos.\n\n¿Qué tema necesitas revisar?",
-  APPOINTMENT_COST: "Antes de hablar de costo, hay que saber qué se va a revisar.\n\n¿Es empresa, salud, vida, auto, patrimonio o contrato?",
+  APPOINTMENT_COST: "La revisión inicial se puede ubicar sin compromiso.\nAntes de confirmarla, dime qué tema quieres revisar: empresa, salud, vida, auto, patrimonio o contrato.",
   APPOINTMENT_URGENT: "Si es urgente, primero hay que ubicar qué está presionando la decisión.\n¿Viene de un contrato, siniestro, salud, flotilla o patrimonio?",
-  APPOINTMENT_TODAY: "Hoy solo conviene priorizar si hay una decisión concreta.\n¿Qué tema necesitas revisar?",
+  APPOINTMENT_TODAY: "Si necesitas verlo hoy, primero ubiquemos el tema para priorizarlo bien.\n¿Es salud, empresa, auto, vida, patrimonio o contrato?",
   APPOINTMENT_LINK: "Por ahora lo dejamos registrado por este medio.\nDime tu nombre y horario preferido, y te contactaremos para confirmar.",
   AGRESIVO: "Puedo responder directo, pero necesito contexto.\n¿Quieres revisar un caso concreto o solo buscas precio?",
   AGRESIVO_CONTINUACION: "Puedo continuar si mantenemos la conversación enfocada.\n\n¿Quieres revisar el caso o prefieres dejarlo aquí?",
@@ -52,7 +52,7 @@ const RESPONSES = {
   EVASIVO: "No necesito información delicada, pero sí contexto mínimo.\n\n¿Es personal, negocio, auto, salud o patrimonio?",
   EVASIVO_CONTINUACION: "Sin ese contexto solo habría una respuesta genérica.\nSi no quieres avanzar ahora, podemos dejarlo aquí.",
   SALIDA_ELEGANTE: "No voy a forzar la conversación.\n\nCuando quieras revisar el caso con más claridad, puedes escribir nuevamente.",
-  DESCONOCIDO: "Todavía no me queda claro qué riesgo quieres revisar.\n¿Hablamos de una persona, una empresa, un auto, una flotilla o un patrimonio?",
+  DESCONOCIDO: "Todavía no me queda claro qué quieres revisar.\n¿Es salud, vida, auto, empresa, flotilla, patrimonio o una póliza/siniestro existente?",
 };
 
 const CONTINUATION_BY_INTENT = {
