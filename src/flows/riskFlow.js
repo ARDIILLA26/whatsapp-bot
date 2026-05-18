@@ -17,8 +17,9 @@ function createSession(user, session) {
 
 function classifyMessage(text) {
   const normalizedText = normalizeText(text);
+  const trimmedText = normalizedText.trim();
 
-  if (KEYWORDS.SALUDO.includes(normalizedText.trim())) {
+  if (KEYWORDS.SALUDO.includes(trimmedText)) {
     return "SALUDO";
   }
 
@@ -46,11 +47,34 @@ function isHealthAcceptanceQuestion(normalizedText) {
   return [
     "me van a aceptar",
     "me van aceptar",
-    "me pueden rechazar",
-    "me rechazan",
+    "me pueden aceptar",
     "me aceptan",
-    "aceptan con enfermedad",
+    "me acepta",
+    "me aceptarian",
+    "me pueden rechazar",
+    "me van a rechazar",
+    "me van rechazar",
+    "me rechazan",
+    "me rechaza",
+    "me rechazarian",
     "me cubren preexistencias",
+    "me cubre preexistencias",
+    "cubren preexistencias",
+    "cubre preexistencias",
+    "me cubren enfermedades",
+    "me cubre enfermedades",
+    "me excluyen enfermedades",
+    "me excluyen una enfermedad",
+    "me pueden excluir",
+    "me van a excluir",
+    "aceptan con enfermedad",
+    "aceptan con enfermedades",
+    "aceptan con padecimiento",
+    "aceptan con padecimientos",
+    "si tengo enfermedad me aceptan",
+    "si tengo enfermedades me aceptan",
+    "si tengo padecimiento me aceptan",
+    "si tengo padecimientos me aceptan",
   ].some((phrase) => normalizedText.includes(phrase));
 }
 
@@ -115,7 +139,7 @@ function resolveResponse(intent, normalizedText, session) {
     return RESPONSES.SALUD_POLIZA_VIGENTE;
   }
 
-  if (intent === "SALUD" && isHealthAcceptanceQuestion(normalizedText)) {
+  if ((intent === "SALUD" || (hasHealthContext && intent === "DESCONOCIDO")) && isHealthAcceptanceQuestion(normalizedText)) {
     return RESPONSES.SALUD_ACEPTACION;
   }
 
